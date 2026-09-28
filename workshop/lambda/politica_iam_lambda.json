@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LeerCSVDesdeS3",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::workshop-aws-101-<tus-iniciales>/entrada/*"
+    },
+    {
+      "Sid": "EscribirEnDynamoDB",
+      "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:BatchWriteItem"],
+      "Resource": "arn:aws:dynamodb:*:*:table/transacciones-<tus-iniciales>"
+    },
+    {
+      "Sid": "EnviarCorreoSES",
+      "Effect": "Allow",
+      "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,331 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWS Basics Workshop 101 - Private static hosting for the workshop guide
+  (CloudFront + private S3 with Origin Access Control). A custom resource downloads
+  the guide HTML, injects the workshop parameters (name, participant emails, region,
+  account) and optionally pre-registers participant emails as SES identities.
+  Copyright 2026 Santiago Garcia Arango.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Workshop }
+        Parameters: [WorkshopName, InstructorEmail, ParticipantEmails, CreateSesIdentities]
+      - Label: { default: Guide content }
+        Parameters: [GuideSourceUrl]
+      - Label: { default: Access and delivery }
+        Parameters: [GuideAccessPassword, PriceClass]
+    ParameterLabels:
+      WorkshopName: { default: Workshop name shown in the guide }
+      InstructorEmail: { default: Instructor email }
+      ParticipantEmails: { default: Participant emails (comma separated) }
+      CreateSesIdentities: { default: Pre-register emails as SES identities }
+      GuideSourceUrl: { default: URL of guide/index.html (raw GitHub or HTTPS) }
+      GuideAccessPassword: { default: "Optional password (HTTP Basic Auth, user workshop)" }
+      PriceClass: { default: CloudFront price class }
+
+Parameters:
+  WorkshopName:
+    Type: String
+    Default: AWS Basics Workshop 101
+    MinLength: 3
+    MaxLength: 80
+  InstructorEmail:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    ConstraintDescription: Must be empty or a valid email address.
+  ParticipantEmails:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Emails of the students. They receive the SES verification email and are listed in the guide.
+  CreateSesIdentities:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+  GuideSourceUrl:
+    Type: String
+    Default: https://raw.githubusercontent.com/san99tiago/aws-basics-workshop-101/main/guide/index.html
+    Description: Leave empty to deploy a placeholder page and upload guide/index.html yourself (see Outputs).
+  GuideAccessPassword:
+    Type: String
+    Default: ""
+    NoEcho: true
+    MaxLength: 64
+    Description: If set, viewers must enter user "workshop" and this password (CloudFront Function, Basic Auth).
+  PriceClass:
+    Type: String
+    Default: PriceClass_100
+    AllowedValues: [PriceClass_100, PriceClass_200, PriceClass_All]
+
+Conditions:
+  HasPassword: !Not [!Equals [!Ref GuideAccessPassword, ""]]
+  CreateSes: !Equals [!Ref CreateSesIdentities, "true"]
+
+Resources:
+  # --------------------------------------------------------------------------- S3 (private)
+  GuideBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      # No BucketName on purpose: CloudFormation generates "<stack>-guidebucket-<random>", so several
+      # stacks (cohorts) can coexist in the same account and region without name collisions.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+            BucketKeyEnabled: true
+      VersioningConfiguration: { Status: Enabled }
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration: { NoncurrentDays: 30 }
+      Tags:
+        - { Key: Project, Value: aws-basics-workshop-101 }
+
+  GuideBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref GuideBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${GuideBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${GuideDistribution}"
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt GuideBucket.Arn, !Sub "${GuideBucket.Arn}/*"]
+            Condition:
+              Bool: { aws:SecureTransport: "false" }
+
+  # --------------------------------------------------------------------------- CloudFront
+  GuideOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        Description: OAC for the workshop guide bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${AWS::StackName}-security-headers"
+        SecurityHeadersConfig:
+          StrictTransportSecurity: { AccessControlMaxAgeSec: 63072000, IncludeSubdomains: true, Preload: true, Override: true }
+          ContentTypeOptions: { Override: true }
+          FrameOptions: { FrameOption: DENY, Override: true }
+          ReferrerPolicy: { ReferrerPolicy: strict-origin-when-cross-origin, Override: true }
+          XSSProtection: { Protection: true, ModeBlock: true, Override: true }
+
+  BasicAuthFunction:
+    Type: AWS::CloudFront::Function
+    Condition: HasPassword
+    Properties:
+      Name: !Sub "${AWS::StackName}-basic-auth"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: HTTP Basic Auth gate for the workshop guide (user "workshop")
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub
+        - |
+          function handler(event) {
+            var expected = 'Basic ${Token}';
+            var headers = event.request.headers;
+            if (headers.authorization && headers.authorization.value === expected) {
+              return event.request;
+            }
+            return {
+              statusCode: 401,
+              statusDescription: 'Unauthorized',
+              headers: { 'www-authenticate': { value: 'Basic realm="AWS Basics Workshop 101"' } }
+            };
+          }
+        - Token: !GetAtt AuthTokenHelper.Token
+
+  GuideDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "${WorkshopName} - private workshop guide"
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: !Ref PriceClass
+        Origins:
+          - Id: guide-s3-origin
+            DomainName: !GetAtt GuideBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt GuideOAC.Id
+            S3OriginConfig: { OriginAccessIdentity: "" }
+        DefaultCacheBehavior:
+          TargetOriginId: guide-s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+          FunctionAssociations: !If
+            - HasPassword
+            - [{ EventType: viewer-request, FunctionARN: !GetAtt BasicAuthFunction.FunctionMetadata.FunctionARN }]
+            - !Ref AWS::NoValue
+        CustomErrorResponses:
+          - { ErrorCode: 403, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+          - { ErrorCode: 404, ResponseCode: 200, ResponsePagePath: /index.html, ErrorCachingMinTTL: 10 }
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+          MinimumProtocolVersion: TLSv1.2_2021
+      Tags:
+        - { Key: Project, Value: aws-basics-workshop-101 }
+
+  # --------------------------------------------------------------------------- Deployer (custom resource)
+  DeployerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: guide-deployer
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:DeleteObject, s3:DeleteObjectVersion, s3:ListBucket, s3:ListBucketVersions]
+                Resource: [!GetAtt GuideBucket.Arn, !Sub "${GuideBucket.Arn}/*"]
+              - Effect: Allow
+                Action: cloudfront:CreateInvalidation
+                Resource: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*"
+              - Effect: Allow
+                Action: [ses:VerifyEmailIdentity, ses:DeleteIdentity, ses:GetIdentityVerificationAttributes]
+                Resource: "*"
+
+  DeployerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Deploys the workshop guide to S3, injects parameters, invalidates CloudFront, registers SES identities
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: index.handler
+      Timeout: 120
+      MemorySize: 256
+      Role: !GetAtt DeployerRole.Arn
+      Code:
+        ZipFile: |
+          import base64,boto3,cfnresponse,datetime,json,urllib.request
+          s3=boto3.client("s3");cf=boto3.client("cloudfront");ses=boto3.client("ses")
+          PLACEHOLDER="<!doctype html><meta charset=utf-8><title>Workshop guide</title><body style='font-family:sans-serif;padding:40px'><h1>AWS Basics Workshop 101</h1><p>Guide not uploaded yet. Upload <code>guide/index.html</code> to the bucket and invalidate CloudFront (see stack Outputs).</p>"
+          def empty(bucket):
+              p=s3.get_paginator("list_object_versions")
+              for page in p.paginate(Bucket=bucket):
+                  objs=[{"Key":o["Key"],"VersionId":o["VersionId"]} for k in("Versions","DeleteMarkers") for o in page.get(k,[])]
+                  if objs:s3.delete_objects(Bucket=bucket,Delete={"Objects":objs,"Quiet":True})
+          def fetch(url):
+              if not url:return PLACEHOLDER
+              with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"cfn-deployer"}),timeout=30) as r:return r.read().decode("utf-8")
+          def handler(event,context):
+              rt=event["RequestType"];p=event["ResourceProperties"];a=p.get("Action");data={}
+              try:
+                  if a=="AuthToken":
+                      data["Token"]=base64.b64encode(("workshop:"+p.get("Password","")).encode()).decode()
+                  else:
+                      bucket=p["Bucket"];emails=[e.strip() for e in p.get("Emails",[]) if e.strip()]
+                      if rt=="Delete":
+                          empty(bucket)
+                          if p.get("CreateSes")=="true":
+                              for e in emails:
+                                  try:ses.delete_identity(Identity=e)
+                                  except Exception as x:print("ses delete",e,x)
+                      else:
+                          html=fetch(p.get("SourceUrl",""))
+                          rep={"__WORKSHOP_NAME__":p.get("WorkshopName",""),"__PARTICIPANT_EMAILS__":",".join(emails),"__INSTRUCTOR_EMAIL__":p.get("InstructorEmail",""),"__AWS_REGION__":p.get("Region",""),"__AWS_ACCOUNT_ID__":p.get("AccountId",""),"__DEPLOYED_AT__":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+                          for k,v in rep.items():html=html.replace(k,json.dumps(v)[1:-1])
+                          s3.put_object(Bucket=bucket,Key="index.html",Body=html.encode("utf-8"),ContentType="text/html; charset=utf-8",CacheControl="max-age=300")
+                          cf.create_invalidation(DistributionId=p["DistributionId"],InvalidationBatch={"Paths":{"Quantity":1,"Items":["/*"]},"CallerReference":context.aws_request_id})
+                          if p.get("CreateSes")=="true":
+                              known=ses.get_identity_verification_attributes(Identities=emails)["VerificationAttributes"] if emails else {}
+                              for e in emails:
+                                  if known.get(e,{}).get("VerificationStatus")!="Success":ses.verify_email_identity(EmailAddress=e)
+                          data["Emails"]=",".join(emails);data["Bytes"]=str(len(html))
+                  cfnresponse.send(event,context,cfnresponse.SUCCESS,data,p.get("Action","GuideDeployer")+"-"+p.get("Bucket","auth"))
+              except Exception as x:
+                  print("ERROR",repr(x));cfnresponse.send(event,context,cfnresponse.FAILED,{"Error":str(x)[:200]},p.get("Action","GuideDeployer")+"-"+p.get("Bucket","auth"))
+      Tags:
+        - { Key: Project, Value: aws-basics-workshop-101 }
+
+  DeployerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DeployerFunction}"
+      RetentionInDays: 14
+
+  AuthTokenHelper:
+    Type: Custom::AuthToken
+    DependsOn: DeployerLogGroup
+    Properties:
+      ServiceToken: !GetAtt DeployerFunction.Arn
+      Action: AuthToken
+      Password: !Ref GuideAccessPassword
+
+  GuideDeployment:
+    Type: Custom::GuideDeployment
+    DependsOn: [GuideBucketPolicy, DeployerLogGroup]
+    Properties:
+      ServiceToken: !GetAtt DeployerFunction.Arn
+      Action: Deploy
+      Bucket: !Ref GuideBucket
+      DistributionId: !Ref GuideDistribution
+      SourceUrl: !Ref GuideSourceUrl
+      WorkshopName: !Ref WorkshopName
+      InstructorEmail: !Ref InstructorEmail
+      Emails: !Ref ParticipantEmails
+      CreateSes: !Ref CreateSesIdentities
+      Region: !Ref AWS::Region
+      AccountId: !Ref AWS::AccountId
+      # Changing this value forces a re-deploy of the guide on stack update.
+      Version: "1"
+
+Outputs:
+  GuideUrl:
+    Description: Share this URL with the students (HTTPS only, private S3 behind CloudFront)
+    Value: !Sub "https://${GuideDistribution.DomainName}"
+  GuideAccess:
+    Description: How students access the guide
+    Value: !If [HasPassword, "User 'workshop' + the GuideAccessPassword parameter", "Open link (no password). Set GuideAccessPassword to restrict."]
+  GuideBucketName:
+    Value: !Ref GuideBucket
+  DistributionId:
+    Value: !Ref GuideDistribution
+  ManualUploadCommand:
+    Description: Re-upload a local guide (from the repo root) and refresh the CDN cache
+    Value: !Sub "aws s3 cp guide/index.html s3://${GuideBucket}/index.html --content-type 'text/html; charset=utf-8' && aws cloudfront create-invalidation --distribution-id ${GuideDistribution} --paths '/*'"
+  SesIdentitiesRegistered:
+    Description: Participant emails registered in SES (each one receives a verification email)
+    Value: !If [CreateSes, !GetAtt GuideDeployment.Emails, "disabled"]

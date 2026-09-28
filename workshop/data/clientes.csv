@@ -1,0 +1,11 @@
+cliente_id,nombre,ciudad,segmento,fecha_vinculacion,correo
+CLI-001,Ana María Gómez,Medellín,PREMIUM,2022-03-15,ana.gomez@ejemplo.com
+CLI-002,Carlos Restrepo,Bogotá,ESTANDAR,2021-07-01,carlos.restrepo@ejemplo.com
+CLI-003,Luisa Fernanda Ruiz,Cali,ESTANDAR,2023-01-20,luisa.ruiz@ejemplo.com
+CLI-004,Jorge Andrés Mejía,Barranquilla,JOVEN,2024-05-10,jorge.mejia@ejemplo.com
+CLI-005,Valentina Cardona,Medellín,PREMIUM,2020-11-30,valentina.cardona@ejemplo.com
+CLI-006,Santiago Herrera,Bucaramanga,ESTANDAR,2022-09-05,santiago.herrera@ejemplo.com
+CLI-007,Camila Torres,Cartagena,JOVEN,2025-02-14,camila.torres@ejemplo.com
+CLI-008,Andrés Felipe Zapata,Pereira,ESTANDAR,2023-08-22,andres.zapata@ejemplo.com
+CLI-009,Mariana López,Manizales,JOVEN,2024-12-01,mariana.lopez@ejemplo.com
+CLI-010,Daniel Ospina,Bogotá,PREMIUM,2019-04-18,daniel.ospina@ejemplo.com

@@ -1,0 +1,16 @@
+{
+  "version": "0",
+  "id": "17793124-05d4-b198-2fde-7ededc63b103",
+  "detail-type": "Object Created",
+  "source": "aws.s3",
+  "account": "123456789012",
+  "time": "2026-10-01T12:00:00Z",
+  "region": "us-east-1",
+  "resources": ["arn:aws:s3:::workshop-aws-101-<tus-iniciales>"],
+  "detail": {
+    "version": "0",
+    "bucket": {"name": "workshop-aws-101-<tus-iniciales>"},
+    "object": {"key": "entrada/transacciones_2026_10.csv", "size": 1024, "etag": "d41d8cd98f00b204e9800998ecf8427e"},
+    "reason": "PutObject"
+  }
+}

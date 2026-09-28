@@ -1,0 +1,24 @@
+# macOS / editors
+.DS_Store
+~$*
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local deployment artifacts
+*.zip
+cloudformation/*.packaged.yaml
+guide/index.local.html
+.env
+.env.*
+
+# LibreOffice / PowerPoint temp
+.~lock.*#
+
+# Playwright MCP screenshots
+.playwright-mcp/

@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Basics Workshop 101</title>
+<meta name="description" content="Workshop guiado de 2 horas: S3, DynamoDB, SES, Lambda (Python), EventBridge y Athena. Guided 2-hour hands-on introduction to AWS core services.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23232f3e'/%3E%3Cpath d='M14 40c10 8 26 8 36 0' stroke='%23ff9900' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='26' r='9' fill='%23ff9900'/%3E%3C/svg%3E">
+<!--
+  AWS Basics Workshop 101 - Guided hands-on guide (ES/EN)
+  Single-file static page. Deployed privately with CloudFront + S3 (see cloudformation/workshop-guide-hosting.yaml).
+  The block below is rewritten at deploy time by the CloudFormation custom resource.
+-->
+<script id="workshop-config" type="application/json">
+{
+  "workshopName": "__WORKSHOP_NAME__",
+  "participantEmails": "__PARTICIPANT_EMAILS__",
+  "instructorEmail": "__INSTRUCTOR_EMAIL__",
+  "awsRegion": "__AWS_REGION__",
+  "awsAccountId": "__AWS_ACCOUNT_ID__",
+  "deployedAt": "__DEPLOYED_AT__"
+}
+</script>
+<style>
+:root{
+  --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef2f7; --text:#1b2430; --muted:#5b6b7f; --border:#d9e1ea;
+  --brand:#232f3e; --accent:#ff9900; --accent-2:#e47911; --link:#0972d3;
+  --ok:#1d8102; --ok-bg:#eaf7e6; --warn:#8d6708; --warn-bg:#fff7dc; --danger:#b3261e; --danger-bg:#fdeceb; --info:#0972d3; --info-bg:#e8f1fb;
+  --code-bg:#0f172a; --code-text:#e2e8f0; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
+  --s3:#3f8624; --ddb:#3b48cc; --lambda:#d86613; --ses:#c7131f; --evb:#e7157b; --athena:#8c4fff;
+  --radius:12px; --sidebar-w:290px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f141a; --surface:#161d26; --surface-2:#1d2733; --text:#e6edf5; --muted:#9fb0c3; --border:#2a3644;
+  --brand:#e6edf5; --link:#6db3ff; --ok:#6fcf6a; --ok-bg:#15301a; --warn:#f2c14e; --warn-bg:#3a2f0e; --danger:#ff7b72; --danger-bg:#3a1a19; --info:#6db3ff; --info-bg:#132a44;
+  --code-bg:#0b1220; --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#161d26; --surface-2:#1d2733; --text:#e6edf5; --muted:#9fb0c3; --border:#2a3644;
+  --brand:#e6edf5; --link:#6db3ff; --ok:#6fcf6a; --ok-bg:#15301a; --warn:#f2c14e; --warn-bg:#3a2f0e; --danger:#ff7b72; --danger-bg:#3a1a19; --info:#6db3ff; --info-bg:#132a44;
+  --code-bg:#0b1220; --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+a{color:var(--link)}
+code,pre,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{background:var(--surface-2);padding:.1em .4em;border-radius:6px;font-size:.92em;border:1px solid var(--border)}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow:auto;font-size:.86em;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+kbd{background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;padding:0 .4em;font-size:.85em}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 .5em}
+h1{font-size:2rem} h2{font-size:1.5rem} h3{font-size:1.15rem} h4{font-size:1rem}
+p{margin:.4em 0 .9em}
+ul,ol{margin:.3em 0 .9em;padding-left:1.4em}
+li{margin:.25em 0}
+hr{border:0;border-top:1px solid var(--border);margin:1.5em 0}
+table{border-collapse:collapse;width:100%;font-size:.93em;margin:.5em 0 1em}
+th,td{border:1px solid var(--border);padding:.45em .6em;text-align:left;vertical-align:top}
+th{background:var(--surface-2)}
+.lang-en,.lang-es{display:none}
+html[data-lang="es"] .lang-es{display:revert}
+html[data-lang="en"] .lang-en{display:revert}
+/* Layout */
+.topbar{position:sticky;top:0;z-index:20;background:#232f3e;color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px;box-shadow:var(--shadow)}
+.topbar .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;text-decoration:none;color:#fff}
+.topbar .logo svg{width:34px;height:34px}
+.topbar .spacer{flex:1}
+.topbar .badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:2px 10px;font-size:.8rem;white-space:nowrap}
+.btn{cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 12px;font:inherit;font-size:.9rem;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#1b2430;font-weight:600}
+.topbar .btn{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)}
+.topbar .btn.active{background:var(--accent);color:#1b2430;border-color:var(--accent);font-weight:700}
+.menu-btn{display:none}
+.layout{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);min-height:calc(100vh - 56px)}
+.sidebar{border-right:1px solid var(--border);background:var(--surface);padding:18px 14px;position:sticky;top:56px;height:calc(100vh - 56px);overflow:auto}
+.sidebar h4{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin:14px 8px 6px}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--text);text-decoration:none;font-size:.93rem}
+.nav a:hover{background:var(--surface-2)}
+.nav a.active{background:var(--surface-2);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+.nav .dot{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:.8rem;font-weight:700;flex:none}
+.nav .mins{margin-left:auto;color:var(--muted);font-size:.78rem}
+.nav .done{color:var(--ok)}
+.progress{margin:8px 8px 4px}
+.progress .bar{height:8px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+.progress .bar>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0;transition:width .3s}
+.progress small{color:var(--muted)}
+main{padding:28px 40px 80px;max-width:980px;width:100%;margin:0 auto}
+.hero{background:linear-gradient(135deg,#232f3e 0%,#1a2533 60%,#2b1d0e 100%);color:#fff;border-radius:16px;padding:32px 34px;margin-bottom:26px;position:relative;overflow:hidden}
+.hero h1{color:#fff;margin-bottom:.3em}
+.hero p{color:#dfe6ee;max-width:70ch}
+.hero .pill{display:inline-block;background:rgba(255,153,0,.18);border:1px solid rgba(255,153,0,.5);color:#ffd28a;border-radius:999px;padding:2px 12px;font-size:.85rem;margin-right:6px;margin-bottom:8px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:16px;font-size:.9rem;color:#dfe6ee}
+.hero .meta b{color:#fff}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:0 0 18px;box-shadow:var(--shadow)}
+.module{margin-top:44px;padding-top:12px;scroll-margin-top:70px}
+.module-head{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.module-head .icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;color:#fff;flex:none;box-shadow:var(--shadow)}
+.module-head .icon svg{width:30px;height:30px}
+.module-head small{display:block;color:var(--muted);font-size:.85rem}
+.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0 18px}
+.goal{background:var(--surface-2);border-radius:10px;padding:12px 14px;font-size:.93rem;border:1px solid var(--border)}
+.goal b{display:block;margin-bottom:2px}
+.step{display:grid;grid-template-columns:40px minmax(0,1fr);gap:14px;padding:16px 0;border-top:1px solid var(--border)}
+.step:last-child{border-bottom:1px solid var(--border)}
+.step .num{width:36px;height:36px;border-radius:50%;background:var(--surface-2);border:2px solid var(--border);display:grid;place-items:center;font-weight:700;color:var(--muted);cursor:pointer;user-select:none;transition:all .15s;flex:none}
+.step .num:hover{border-color:var(--accent)}
+.step.done .num{background:var(--ok);border-color:var(--ok);color:#fff}
+.step.done .step-title{text-decoration:line-through;color:var(--muted)}
+.step-title{font-weight:600;font-size:1.02rem;margin-bottom:4px;cursor:pointer}
+.step-body{color:var(--text)}
+.step-body p:last-child{margin-bottom:0}
+.callout{border-left:4px solid var(--info);background:var(--info-bg);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:.95rem}
+.callout.tip{border-color:var(--ok);background:var(--ok-bg)}
+.callout.warn{border-color:var(--warn);background:var(--warn-bg)}
+.callout.danger{border-color:var(--danger);background:var(--danger-bg)}
+.callout.concept{border-color:var(--athena);background:var(--surface-2)}
+.callout b:first-child{display:inline-block;margin-bottom:2px}
+.codewrap{position:relative;margin:10px 0}
+.codewrap .copy{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:3px 9px;font-size:.75rem;cursor:pointer}
+.codewrap .copy:hover{background:var(--accent);color:#1b2430;border-color:var(--accent)}
+.codewrap .filename{position:absolute;top:8px;left:12px;color:#94a3b8;font-size:.72rem;font-family:ui-monospace,monospace}
+.codewrap.has-name pre{padding-top:30px}
+.ph{color:#ffd28a;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:3px 12px;font-size:.85rem}
+.check{display:flex;flex-direction:column;gap:6px}
+.check label{display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:6px 8px;border-radius:8px}
+.check label:hover{background:var(--surface-2)}
+.check input{margin-top:5px;accent-color:var(--ok)}
+details{border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:10px 0;background:var(--surface)}
+summary{cursor:pointer;font-weight:600}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.svc{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.svc i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.form label{font-size:.85rem;color:var(--muted);display:block;margin-bottom:4px}
+.form input,.form select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit}
+.form input:focus{outline:2px solid var(--accent);border-color:transparent}
+.dl{display:flex;flex-wrap:wrap;gap:10px}
+.arch{width:100%;height:auto;display:block;margin:6px auto 4px}
+.timeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin:10px 0}
+.timeline div{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.82rem;text-align:center}
+.timeline div b{display:block;font-size:1rem}
+.quiz .q{margin:12px 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.quiz .opts{display:grid;gap:6px;margin-top:8px}
+.quiz .opts button{text-align:left;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;font:inherit}
+.quiz .opts button.ok{border-color:var(--ok);background:var(--ok-bg)}
+.quiz .opts button.bad{border-color:var(--danger);background:var(--danger-bg)}
+.footer{color:var(--muted);font-size:.85rem;text-align:center;padding:30px 16px;border-top:1px solid var(--border);margin-top:40px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:#232f3e;color:#fff;padding:10px 18px;border-radius:999px;opacity:0;transition:all .25s;pointer-events:none;font-size:.9rem;z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.module-nav{display:flex;justify-content:space-between;gap:10px;margin-top:22px}
+@media (max-width: 960px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:0;top:56px;width:min(88vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:30;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .sidebar.open{transform:none}
+  .menu-btn{display:inline-flex}
+  main{padding:18px 16px 60px}
+  .hero{padding:22px 18px}
+  .topbar .badge{display:none}
+}
+@media print{.topbar,.sidebar,.copy,.module-nav{display:none!important}.layout{display:block}main{max-width:none;padding:0}.module{page-break-before:always}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="btn menu-btn" id="menuBtn" aria-label="menu">☰</button>
+  <a class="logo" href="#top">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#ff9900"/><path d="M14 40c10 8 26 8 36 0" stroke="#232f3e" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="32" cy="26" r="9" fill="#232f3e"/></svg>
+    <span id="brandName">AWS Basics Workshop 101</span>
+  </a>
+  <span class="badge" id="badgeRegion"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="langEs" title="Español">🇨🇴 ES</button>
+  <button class="btn" id="langEn" title="English">🇺🇸 EN</button>
+  <button class="btn" id="themeBtn" title="Tema / Theme">◐</button>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar">
+    <div class="progress"><div class="bar"><div id="progressBar"></div></div><small id="progressText"></small></div>
+    <h4 class="lang-es">Módulos</h4><h4 class="lang-en">Modules</h4>
+    <div class="nav" id="nav"></div>
+    <h4 class="lang-es">Extras</h4><h4 class="lang-en">Extras</h4>
+    <div class="nav" id="navExtras"></div>
+    <div style="margin:18px 8px 0"><button class="btn" id="resetBtn" style="width:100%;justify-content:center"><span class="lang-es">Reiniciar progreso</span><span class="lang-en">Reset progress</span></button></div>
+  </nav>
+
+  <main id="top">
+    <section class="hero" id="hero"></section>
+    <section class="card" id="setupCard"></section>
+    <section class="card" id="agendaCard"></section>
+    <section class="card" id="archCard"></section>
+    <div id="modules"></div>
+    <div id="extras"></div>
+    <footer class="footer">
+      <div class="lang-es">Hecho con cariño para aprender AWS paso a paso. Contenido educativo; verifica siempre la documentación oficial de AWS. Copyright 2026 Santiago Garcia Arango.</div>
+      <div class="lang-en">Made with care to learn AWS step by step. Educational content; always double-check the official AWS documentation. Copyright 2026 Santiago Garcia Arango.</div>
+    </footer>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   DATA: reference files (Spanish), Lambda code, i18n UI strings
+   ===================================================================== */
+const CSV_FILES = {
+"transacciones_2026_09.csv": `id_transaccion,cliente_id,nombre_cliente,fecha,tipo,monto,moneda,ciudad,canal,estado
+TX-0001,CLI-001,Ana María Gómez,2026-09-01,COMPRA,125000,COP,Medellín,APP,APROBADA
+TX-0002,CLI-002,Carlos Restrepo,2026-09-01,TRANSFERENCIA,850000,COP,Bogotá,WEB,APROBADA
+TX-0003,CLI-003,Luisa Fernanda Ruiz,2026-09-02,RETIRO,200000,COP,Cali,CAJERO,APROBADA
+TX-0004,CLI-001,Ana María Gómez,2026-09-02,COMPRA,48000,COP,Medellín,APP,APROBADA
+TX-0005,CLI-004,Jorge Andrés Mejía,2026-09-03,PAGO_SERVICIO,132500,COP,Barranquilla,APP,APROBADA
+TX-0006,CLI-005,Valentina Cardona,2026-09-03,COMPRA,2300000,COP,Medellín,WEB,RECHAZADA
+TX-0007,CLI-002,Carlos Restrepo,2026-09-04,COMPRA,67900,COP,Bogotá,APP,APROBADA
+TX-0008,CLI-006,Santiago Herrera,2026-09-04,TRANSFERENCIA,1500000,COP,Bucaramanga,WEB,APROBADA
+TX-0009,CLI-003,Luisa Fernanda Ruiz,2026-09-05,COMPRA,15900,COP,Cali,APP,APROBADA
+TX-0010,CLI-007,Camila Torres,2026-09-05,RETIRO,400000,COP,Cartagena,CAJERO,APROBADA
+TX-0011,CLI-001,Ana María Gómez,2026-09-06,TRANSFERENCIA,320000,COP,Medellín,APP,APROBADA
+TX-0012,CLI-008,Andrés Felipe Zapata,2026-09-06,COMPRA,899000,COP,Pereira,WEB,PENDIENTE
+TX-0013,CLI-004,Jorge Andrés Mejía,2026-09-07,COMPRA,25000,COP,Barranquilla,APP,APROBADA
+TX-0014,CLI-009,Mariana López,2026-09-07,PAGO_SERVICIO,98700,COP,Manizales,WEB,APROBADA
+TX-0015,CLI-005,Valentina Cardona,2026-09-08,COMPRA,156000,COP,Medellín,APP,APROBADA
+TX-0016,CLI-010,Daniel Ospina,2026-09-08,TRANSFERENCIA,5000000,COP,Bogotá,WEB,RECHAZADA
+TX-0017,CLI-002,Carlos Restrepo,2026-09-09,RETIRO,300000,COP,Bogotá,CAJERO,APROBADA
+TX-0018,CLI-006,Santiago Herrera,2026-09-09,COMPRA,42500,COP,Bucaramanga,APP,APROBADA
+TX-0019,CLI-007,Camila Torres,2026-09-10,PAGO_SERVICIO,210000,COP,Cartagena,APP,APROBADA
+TX-0020,CLI-001,Ana María Gómez,2026-09-10,COMPRA,78000,COP,Medellín,WEB,APROBADA
+TX-0021,CLI-003,Luisa Fernanda Ruiz,2026-09-11,TRANSFERENCIA,620000,COP,Cali,APP,APROBADA
+TX-0022,CLI-008,Andrés Felipe Zapata,2026-09-11,COMPRA,33000,COP,Pereira,APP,APROBADA
+TX-0023,CLI-009,Mariana López,2026-09-12,RETIRO,150000,COP,Manizales,CAJERO,APROBADA
+TX-0024,CLI-010,Daniel Ospina,2026-09-12,COMPRA,1250000,COP,Bogotá,WEB,APROBADA
+TX-0025,CLI-004,Jorge Andrés Mejía,2026-09-13,TRANSFERENCIA,275000,COP,Barranquilla,APP,APROBADA
+TX-0026,CLI-005,Valentina Cardona,2026-09-13,PAGO_SERVICIO,64300,COP,Medellín,APP,APROBADA
+TX-0027,CLI-002,Carlos Restrepo,2026-09-14,COMPRA,189000,COP,Bogotá,APP,PENDIENTE
+TX-0028,CLI-006,Santiago Herrera,2026-09-14,RETIRO,500000,COP,Bucaramanga,CAJERO,APROBADA
+TX-0029,CLI-007,Camila Torres,2026-09-15,COMPRA,99900,COP,Cartagena,WEB,APROBADA
+TX-0030,CLI-001,Ana María Gómez,2026-09-15,PAGO_SERVICIO,145000,COP,Medellín,APP,APROBADA
+`,
+"transacciones_2026_10.csv": `id_transaccion,cliente_id,nombre_cliente,fecha,tipo,monto,moneda,ciudad,canal,estado
+TX-0031,CLI-003,Luisa Fernanda Ruiz,2026-10-01,COMPRA,54000,COP,Cali,APP,APROBADA
+TX-0032,CLI-008,Andrés Felipe Zapata,2026-10-01,TRANSFERENCIA,910000,COP,Pereira,WEB,APROBADA
+TX-0033,CLI-001,Ana María Gómez,2026-10-02,RETIRO,250000,COP,Medellín,CAJERO,APROBADA
+TX-0034,CLI-010,Daniel Ospina,2026-10-02,COMPRA,3100000,COP,Bogotá,WEB,RECHAZADA
+TX-0035,CLI-009,Mariana López,2026-10-03,COMPRA,72000,COP,Manizales,APP,APROBADA
+TX-0036,CLI-002,Carlos Restrepo,2026-10-03,PAGO_SERVICIO,118000,COP,Bogotá,APP,APROBADA
+TX-0037,CLI-006,Santiago Herrera,2026-10-04,TRANSFERENCIA,430000,COP,Bucaramanga,APP,APROBADA
+TX-0038,CLI-004,Jorge Andrés Mejía,2026-10-04,COMPRA,19900,COP,Barranquilla,APP,APROBADA
+TX-0039,CLI-007,Camila Torres,2026-10-05,RETIRO,600000,COP,Cartagena,CAJERO,PENDIENTE
+TX-0040,CLI-005,Valentina Cardona,2026-10-05,COMPRA,268000,COP,Medellín,WEB,APROBADA
+TX-0041,CLI-001,Ana María Gómez,2026-10-06,COMPRA,36500,COP,Medellín,APP,APROBADA
+TX-0042,CLI-003,Luisa Fernanda Ruiz,2026-10-06,PAGO_SERVICIO,87400,COP,Cali,WEB,APROBADA
+TX-0043,CLI-010,Daniel Ospina,2026-10-07,TRANSFERENCIA,2200000,COP,Bogotá,WEB,APROBADA
+TX-0044,CLI-008,Andrés Felipe Zapata,2026-10-07,COMPRA,45000,COP,Pereira,APP,APROBADA
+TX-0045,CLI-002,Carlos Restrepo,2026-10-08,COMPRA,510000,COP,Bogotá,WEB,APROBADA
+`,
+"clientes.csv": `cliente_id,nombre,ciudad,segmento,fecha_vinculacion,correo
+CLI-001,Ana María Gómez,Medellín,PREMIUM,2022-03-15,ana.gomez@ejemplo.com
+CLI-002,Carlos Restrepo,Bogotá,ESTANDAR,2021-07-01,carlos.restrepo@ejemplo.com
+CLI-003,Luisa Fernanda Ruiz,Cali,ESTANDAR,2023-01-20,luisa.ruiz@ejemplo.com
+CLI-004,Jorge Andrés Mejía,Barranquilla,JOVEN,2024-05-10,jorge.mejia@ejemplo.com
+CLI-005,Valentina Cardona,Medellín,PREMIUM,2020-11-30,valentina.cardona@ejemplo.com
+CLI-006,Santiago Herrera,Bucaramanga,ESTANDAR,2022-09-05,santiago.herrera@ejemplo.com
+CLI-007,Camila Torres,Cartagena,JOVEN,2025-02-14,camila.torres@ejemplo.com
+CLI-008,Andrés Felipe Zapata,Pereira,ESTANDAR,2023-08-22,andres.zapata@ejemplo.com
+CLI-009,Mariana López,Manizales,JOVEN,2024-12-01,mariana.lopez@ejemplo.com
+CLI-010,Daniel Ospina,Bogotá,PREMIUM,2019-04-18,daniel.ospina@ejemplo.com
+`
+};
+
+const LAMBDA_CODE = `import csv
+import io
+import json
+import os
+import urllib.parse
+from collections import defaultdict
+from decimal import Decimal
+
+import boto3
+
+# Variables de entorno / Environment variables (Configuration -> Environment variables)
+TABLE_NAME = os.environ["TABLE_NAME"]
+SENDER_EMAIL = os.environ["SENDER_EMAIL"]
+DESTINATION_EMAIL = os.environ["DESTINATION_EMAIL"]
+
+s3 = boto3.client("s3")
+ses = boto3.client("ses")
+table = boto3.resource("dynamodb").Table(TABLE_NAME)
+
+
+def extraer_bucket_y_key(event: dict) -> tuple[str, str]:
+    """Soporta eventos de EventBridge (S3 Object Created) y el evento de prueba manual."""
+    if "detail" in event:  # EventBridge -> S3 "Object Created"
+        return event["detail"]["bucket"]["name"], urllib.parse.unquote_plus(event["detail"]["object"]["key"])
+    return event["bucket"], event["key"]  # Evento de prueba: {"bucket": "...", "key": "entrada/archivo.csv"}
+
+
+def leer_csv(bucket: str, key: str) -> list[dict]:
+    respuesta = s3.get_object(Bucket=bucket, Key=key)
+    contenido = respuesta["Body"].read().decode("utf-8-sig")  # utf-8-sig tolera el BOM de Excel
+    return list(csv.DictReader(io.StringIO(contenido)))
+
+
+def guardar_en_dynamodb(filas: list[dict], archivo: str) -> int:
+    """PK = cliente_id  |  SK = fecha#id_transaccion  (consultar por cliente y ordenar por fecha)."""
+    with table.batch_writer() as batch:
+        for fila in filas:
+            batch.put_item(
+                Item={
+                    "cliente_id": fila["cliente_id"],
+                    "fecha_id": f'{fila["fecha"]}#{fila["id_transaccion"]}',
+                    "id_transaccion": fila["id_transaccion"],
+                    "nombre_cliente": fila["nombre_cliente"],
+                    "fecha": fila["fecha"],
+                    "tipo": fila["tipo"],
+                    "monto": Decimal(fila["monto"]),
+                    "moneda": fila["moneda"],
+                    "ciudad": fila["ciudad"],
+                    "canal": fila["canal"],
+                    "estado": fila["estado"],
+                    "archivo_origen": archivo,
+                }
+            )
+    return len(filas)
+
+
+def construir_resumen(filas: list[dict], archivo: str) -> str:
+    total = sum(Decimal(f["monto"]) for f in filas if f["estado"] == "APROBADA")
+    por_tipo = defaultdict(Decimal)
+    por_estado = defaultdict(int)
+    for f in filas:
+        por_estado[f["estado"]] += 1
+        if f["estado"] == "APROBADA":
+            por_tipo[f["tipo"]] += Decimal(f["monto"])
+
+    lineas = [
+        f"Archivo procesado: {archivo}",
+        f"Transacciones leídas: {len(filas)}",
+        f"Total aprobado (COP): {total:,.0f}",
+        "",
+        "Por estado:",
+        *[f"  - {estado}: {cantidad}" for estado, cantidad in sorted(por_estado.items())],
+        "",
+        "Monto aprobado por tipo:",
+        *[f"  - {tipo}: {monto:,.0f}" for tipo, monto in sorted(por_tipo.items())],
+        "",
+        "Procesado automáticamente por AWS Lambda + EventBridge (AWS Basics Workshop 101).",
+    ]
+    return "\\n".join(lineas)
+
+
+def enviar_correo(asunto: str, cuerpo: str) -> str:
+    respuesta = ses.send_email(
+        Source=SENDER_EMAIL,
+        Destination={"ToAddresses": [DESTINATION_EMAIL]},
+        Message={
+            "Subject": {"Data": asunto, "Charset": "UTF-8"},
+            "Body": {"Text": {"Data": cuerpo, "Charset": "UTF-8"}},
+        },
+    )
+    return respuesta["MessageId"]
+
+
+def lambda_handler(event, context):
+    print("Evento recibido:", json.dumps(event))
+    bucket, key = extraer_bucket_y_key(event)
+
+    if not key.lower().endswith(".csv"):
+        print(f"Se ignora el objeto {key} porque no es un CSV")
+        return {"status": "IGNORADO", "key": key}
+
+    filas = leer_csv(bucket, key)
+    guardadas = guardar_en_dynamodb(filas, key)
+    resumen = construir_resumen(filas, key)
+    print(resumen)
+
+    message_id = enviar_correo(asunto=f"[Workshop AWS] Resumen de {key}", cuerpo=resumen)
+    return {"status": "OK", "archivo": key, "transacciones": guardadas, "ses_message_id": message_id}
+`;
+
+const UI = {
+  es: {
+    minutes:"min", total:"Duración total", modules:"módulos", level:"Nivel", levelVal:"Principiante (sin experiencia previa en AWS)", mode:"Modalidad", modeVal:"ClickOps guiado en la consola de AWS",
+    progress:(d,t)=>`${d} de ${t} pasos completados`, copied:"¡Copiado!", copy:"Copiar", download:"Descargar", stepsTitle:"Pasos", goalsTitle:"Al terminar este módulo podrás…",
+    checkpoint:"✅ Punto de control: verifica antes de continuar", trouble:"🛠️ ¿Algo no funcionó? Problemas comunes", concept:"💡 Concepto clave",
+    prev:"← Módulo anterior", next:"Módulo siguiente →", markAll:"Marcar módulo como completado", yourSetup:"Tu configuración (personaliza la guía)",
+    initials:"Tus iniciales (minúsculas, sin espacios)", initialsHint:"Ej: sga. Se usan para que tus recursos tengan nombres únicos.", email:"Tu correo (para SES)", region:"Región de AWS",
+    setupHint:"Todo lo que escribas aquí reemplaza automáticamente los <span class='ph'>marcadores</span> en los comandos y nombres de esta guía. Se guarda solo en tu navegador.",
+    agenda:"Agenda (2 horas)", arch:"¿Qué vamos a construir?", files:"Archivos de referencia (descárgalos ahora)",
+    archText:"Una pequeña <b>automatización de conciliación</b>: cada vez que alguien sube un archivo CSV de transacciones a S3, EventBridge detecta el evento, una función Lambda en Python lo procesa, guarda cada transacción en DynamoDB y envía un resumen por correo con SES. Con Athena consultamos los CSV con SQL, sin mover los datos.",
+    participants:"Participantes con correo pre-verificado en SES", instructor:"Instructor", deployed:"Guía desplegada", nameLabel:"Módulo",
+    placeholder:"tus-iniciales", placeholderEmail:"tu-correo@ejemplo.com", resetConfirm:"¿Reiniciar todo el progreso y la configuración guardada?",
+    quizTitle:"🧠 Mini quiz de cierre", quizOk:"¡Correcto! ", quizBad:"No exactamente. ",
+  },
+  en: {
+    minutes:"min", total:"Total duration", modules:"modules", level:"Level", levelVal:"Beginner (no previous AWS experience)", mode:"Format", modeVal:"Guided ClickOps in the AWS Console",
+    progress:(d,t)=>`${d} of ${t} steps completed`, copied:"Copied!", copy:"Copy", download:"Download", stepsTitle:"Steps", goalsTitle:"By the end of this module you will be able to…",
+    checkpoint:"✅ Checkpoint: verify before moving on", trouble:"🛠️ Something failed? Common issues", concept:"💡 Key concept",
+    prev:"← Previous module", next:"Next module →", markAll:"Mark module as completed", yourSetup:"Your setup (personalize this guide)",
+    initials:"Your initials (lowercase, no spaces)", initialsHint:"E.g. sga. Used so your resource names are unique.", email:"Your email (for SES)", region:"AWS Region",
+    setupHint:"Whatever you type here automatically replaces the <span class='ph'>placeholders</span> in the commands and names throughout this guide. It is stored only in your browser.",
+    agenda:"Agenda (2 hours)", arch:"What are we going to build?", files:"Reference files (download them now)",
+    archText:"A small <b>reconciliation automation</b>: every time someone uploads a transactions CSV file to S3, EventBridge detects the event, a Python Lambda function processes it, stores each transaction in DynamoDB and emails a summary with SES. With Athena we query the CSV files using SQL, without moving the data.",
+    participants:"Participants with pre-verified SES email", instructor:"Instructor", deployed:"Guide deployed", nameLabel:"Module",
+    placeholder:"your-initials", placeholderEmail:"your-email@example.com", resetConfirm:"Reset all progress and saved settings?",
+    quizTitle:"🧠 Closing mini quiz", quizOk:"Correct! ", quizBad:"Not quite. ",
+  }
+};
+
+const ICONS = {
+  intro:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>`,
+  s3:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>`,
+  ddb:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>`,
+  ses:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>`,
+  lambda:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 20l6-16h2l6 16"/><path d="M9 20l4-9"/></svg>`,
+  evb:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h5m0 0l5-5.5M12 12l5 5.5"/></svg>`,
+  athena:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5L21 21"/><path d="M7 10h6M10 7v6"/></svg>`,
+  end:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>`
+};
+</script>
+
+<script>
+/* =====================================================================
+   MODULES (content in ES + EN). Placeholders: {{INI}} {{INI_}} {{BUCKET}} {{TABLE}} {{FN}} {{RULE}} {{DB}} {{EMAIL}} {{REGION}}
+   ===================================================================== */
+const t = (es, en) => ({es, en});
+
+const MODULES = [
+/* ------------------------------------------------------------------ 0. INTRO */
+{
+  id:"intro", icon:"intro", color:"#232f3e", mins:10,
+  title: t("Bienvenida y preparación", "Welcome & setup"),
+  subtitle: t("Consola de AWS, región, convenciones de nombres y archivos", "AWS Console, region, naming conventions and files"),
+  goals: [
+    t("<b>Entrar a la consola</b> y ubicarte en la región correcta.", "<b>Sign in to the console</b> and pick the right region."),
+    t("<b>Entender el reto</b>: qué automatización vamos a construir y por qué.", "<b>Understand the challenge</b>: what automation we will build and why."),
+    t("<b>Nombrar recursos</b> sin chocar con tus compañeros.", "<b>Name resources</b> without colliding with your classmates."),
+  ],
+  concept: t(
+    `<b>ClickOps vs. Infraestructura como Código.</b> Hoy haremos todo <i>a mano</i> en la consola (ClickOps) porque es la mejor forma de <b>ver y tocar</b> cada servicio. En el mundo real, lo que hoy hagas con clics se escribe como código (CloudFormation, CDK o Terraform) para que sea repetible, versionado y auditable. Al final te mostramos el camino.`,
+    `<b>ClickOps vs. Infrastructure as Code.</b> Today we do everything <i>by hand</i> in the console (ClickOps) because it is the best way to <b>see and touch</b> each service. In real life, what you click today gets written as code (CloudFormation, CDK or Terraform) so it is repeatable, versioned and auditable. We show you that path at the end.`),
+  steps: [
+    { title: t("Inicia sesión en la consola de AWS", "Sign in to the AWS Console"),
+      body: t(`<p>Abre <a href="https://console.aws.amazon.com" target="_blank" rel="noopener">console.aws.amazon.com</a> con las credenciales que te entregó tu instructor (usuario IAM o enlace de Workshop Studio / IAM Identity Center).</p><p>La consola es una página web para administrar todos los servicios de AWS. Arriba tienes la <b>barra de búsqueda</b>: escribe el nombre de un servicio (por ejemplo <kbd>S3</kbd>) y presiona <kbd>Enter</kbd>. La usaremos todo el tiempo.</p>`,
+              `<p>Open <a href="https://console.aws.amazon.com" target="_blank" rel="noopener">console.aws.amazon.com</a> with the credentials your instructor gave you (IAM user or a Workshop Studio / IAM Identity Center link).</p><p>The console is a web page to manage every AWS service. At the top you have the <b>search bar</b>: type a service name (for example <kbd>S3</kbd>) and press <kbd>Enter</kbd>. We will use it all the time.</p>`) },
+    { title: t("Selecciona la región y no la cambies", "Select the region and do not change it"),
+      body: t(`<p>Arriba a la derecha, junto a tu nombre de usuario, hay un selector de <b>región</b>. Selecciona <code>{{REGION}}</code> (o la que indique tu instructor). Una región es un grupo de centros de datos físicos; casi todos los recursos que creas viven en una sola región.</p><div class="callout warn"><b>Muy importante:</b> si a mitad del taller “desaparecen” tus recursos, casi siempre es porque cambiaste de región sin darte cuenta.</div>`,
+              `<p>Top right, next to your user name, there is a <b>region</b> selector. Pick <code>{{REGION}}</code> (or the one your instructor tells you). A region is a group of physical data centers; almost every resource you create lives in exactly one region.</p><div class="callout warn"><b>Very important:</b> if halfway through the workshop your resources “disappear”, it is almost always because you switched region without noticing.</div>`) },
+    { title: t("Escribe tus iniciales en el panel “Tu configuración”", "Type your initials in the “Your setup” panel"),
+      body: t(`<p>Sube al panel <b>Tu configuración</b> (al inicio de esta página) y escribe tus iniciales en minúsculas, por ejemplo <code>sga</code>. Muchos nombres en AWS deben ser únicos (los buckets de S3 son únicos <b>en todo el mundo</b>), así que usaremos este sufijo en todo:</p>
+<table><tr><th>Recurso</th><th>Nombre que usarás</th></tr>
+<tr><td>Bucket S3</td><td><code>{{BUCKET}}</code></td></tr>
+<tr><td>Tabla DynamoDB</td><td><code>{{TABLE}}</code></td></tr>
+<tr><td>Función Lambda</td><td><code>{{FN}}</code></td></tr>
+<tr><td>Regla EventBridge</td><td><code>{{RULE}}</code></td></tr>
+<tr><td>Base de datos Athena</td><td><code>{{DB}}</code> (guion bajo, Athena no permite guiones)</td></tr></table>`,
+              `<p>Scroll up to the <b>Your setup</b> panel (top of this page) and type your lowercase initials, e.g. <code>sga</code>. Many AWS names must be unique (S3 bucket names are unique <b>worldwide</b>), so we will use this suffix everywhere:</p>
+<table><tr><th>Resource</th><th>Name you will use</th></tr>
+<tr><td>S3 bucket</td><td><code>{{BUCKET}}</code></td></tr>
+<tr><td>DynamoDB table</td><td><code>{{TABLE}}</code></td></tr>
+<tr><td>Lambda function</td><td><code>{{FN}}</code></td></tr>
+<tr><td>EventBridge rule</td><td><code>{{RULE}}</code></td></tr>
+<tr><td>Athena database</td><td><code>{{DB}}</code> (underscore, Athena does not allow hyphens)</td></tr></table>`) },
+    { title: t("Descarga los 3 archivos CSV de referencia", "Download the 3 reference CSV files"),
+      body: t(`<p>En la tarjeta <b>Archivos de referencia</b> descarga los tres CSV. Son datos <b>ficticios</b> de transacciones y clientes de una empresa colombiana, en español. Abre uno con un editor de texto o Excel para conocer las columnas: <code>id_transaccion, cliente_id, nombre_cliente, fecha, tipo, monto, moneda, ciudad, canal, estado</code>.</p><div class="callout tip"><b>Tip:</b> guarda los archivos en una carpeta fácil de encontrar (Escritorio/workshop). Los subirás varias veces.</div>`,
+              `<p>In the <b>Reference files</b> card download the three CSV files. They contain <b>fictional</b> transactions and customers of a Colombian company, in Spanish. Open one with a text editor or Excel to get to know the columns: <code>id_transaccion, cliente_id, nombre_cliente, fecha, tipo, monto, moneda, ciudad, canal, estado</code>.</p><div class="callout tip"><b>Tip:</b> save them in an easy to find folder (Desktop/workshop). You will upload them several times.</div>`) },
+  ],
+  checkpoint: [
+    t("Veo la consola de AWS y la región seleccionada es la correcta.", "I can see the AWS Console and the selected region is the right one."),
+    t("Escribí mis iniciales y los nombres de la tabla de arriba ya aparecen personalizados.", "I typed my initials and the names in the table above now look personalized."),
+    t("Tengo los 3 archivos CSV en mi computador.", "I have the 3 CSV files on my computer."),
+  ],
+  trouble: [
+    { q: t("No puedo iniciar sesión / me pide MFA.", "I cannot sign in / it asks for MFA."), a: t("Pide ayuda al instructor: puede que tu usuario aún no esté activo o que el enlace del evento haya expirado.", "Ask the instructor: your user may not be active yet or the event link may have expired.") },
+    { q: t("La consola está en inglés y quiero español (o viceversa).", "The console is in English and I want Spanish (or the other way around)."), a: t("Abajo a la izquierda de la consola hay un selector de idioma. Esta guía usa los nombres de los botones en inglés entre paréntesis cuando ayuda.", "Bottom left of the console there is a language selector. This guide shows button names in English when it helps.") },
+  ]
+},
+/* ------------------------------------------------------------------ 1. S3 */
+{
+  id:"s3", icon:"s3", color:"var(--s3)", mins:15,
+  title: t("Amazon S3: tu primer almacenamiento en la nube", "Amazon S3: your first cloud storage"),
+  subtitle: t("Crear un bucket privado, organizar prefijos y subir archivos", "Create a private bucket, organize prefixes and upload files"),
+  goals: [
+    t("<b>Crear un bucket</b> privado, con versionado y cifrado.", "<b>Create a private bucket</b> with versioning and encryption."),
+    t("<b>Explicar</b> qué es un objeto, una clave (key) y un prefijo.", "<b>Explain</b> what an object, a key and a prefix are."),
+    t("<b>Subir archivos</b> y verificar que nadie externo puede leerlos.", "<b>Upload files</b> and verify that nobody outside can read them."),
+  ],
+  concept: t(
+    `<b>S3 guarda objetos, no archivos.</b> Un <b>bucket</b> es un contenedor con nombre único global. Cada <b>objeto</b> es un archivo + metadatos, identificado por una <b>clave</b> (key) como <code>entrada/transacciones_2026_09.csv</code>. Las “carpetas” de la consola son solo <b>prefijos</b> de la clave: S3 es plano, pero organizar por prefijos hace que Athena, Lambda y EventBridge puedan filtrar fácilmente. S3 está diseñado para una durabilidad del 99,999999999 % (11 nueves) y, por defecto, <b>todo es privado</b>.`,
+    `<b>S3 stores objects, not files.</b> A <b>bucket</b> is a container with a globally unique name. Each <b>object</b> is a file + metadata, identified by a <b>key</b> such as <code>entrada/transacciones_2026_09.csv</code>. The console “folders” are just key <b>prefixes</b>: S3 is flat, but organizing by prefixes lets Athena, Lambda and EventBridge filter easily. S3 is designed for 99.999999999% durability (11 nines) and, by default, <b>everything is private</b>.`),
+  steps: [
+    { title: t("Abre S3 y crea el bucket", "Open S3 and create the bucket"),
+      body: t(`<p>Busca <kbd>S3</kbd> en la barra superior → <b>Create bucket</b>.</p><ul><li><b>Bucket type:</b> General purpose.</li><li><b>Bucket name:</b> <code>{{BUCKET}}</code> (minúsculas, sin espacios; si dice que ya existe, agrega un número al final y usa ese mismo nombre en toda la guía).</li><li><b>Object Ownership:</b> ACLs disabled (recomendado).</li><li><b>Block Public Access:</b> deja <b>todas</b> las casillas marcadas. ✅ Nunca hacemos buckets públicos.</li><li><b>Bucket Versioning:</b> Enable.</li><li><b>Default encryption:</b> SSE-S3 (Amazon S3 managed keys), Bucket Key enabled.</li></ul><p>Clic en <b>Create bucket</b>.</p>`,
+              `<p>Search <kbd>S3</kbd> in the top bar → <b>Create bucket</b>.</p><ul><li><b>Bucket type:</b> General purpose.</li><li><b>Bucket name:</b> <code>{{BUCKET}}</code> (lowercase, no spaces; if it says it already exists, add a number at the end and use that same name for the rest of the guide).</li><li><b>Object Ownership:</b> ACLs disabled (recommended).</li><li><b>Block Public Access:</b> leave <b>all</b> boxes checked. ✅ We never make public buckets.</li><li><b>Bucket Versioning:</b> Enable.</li><li><b>Default encryption:</b> SSE-S3 (Amazon S3 managed keys), Bucket Key enabled.</li></ul><p>Click <b>Create bucket</b>.</p>`) },
+    { title: t("Crea la estructura de prefijos (“carpetas”)", "Create the prefix (“folder”) structure"),
+      body: t(`<p>Entra al bucket → pestaña <b>Objects</b> → <b>Create folder</b>. Crea estas tres, una por una:</p>
+<table><tr><th>Prefijo</th><th>Para qué</th></tr>
+<tr><td><code>entrada/</code></td><td>Aquí llegan los CSV de transacciones (dispara la automatización)</td></tr>
+<tr><td><code>referencia/clientes/</code></td><td>Tabla maestra de clientes (para el JOIN en Athena)</td></tr>
+<tr><td><code>athena-resultados/</code></td><td>Athena guarda aquí los resultados de cada consulta</td></tr></table>
+<p>Para <code>referencia/clientes/</code>: crea primero <code>referencia</code>, entra en ella y crea <code>clientes</code> adentro.</p>`,
+              `<p>Open the bucket → <b>Objects</b> tab → <b>Create folder</b>. Create these three, one at a time:</p>
+<table><tr><th>Prefix</th><th>Purpose</th></tr>
+<tr><td><code>entrada/</code></td><td>Incoming transaction CSVs land here (triggers the automation)</td></tr>
+<tr><td><code>referencia/clientes/</code></td><td>Customer master table (for the Athena JOIN)</td></tr>
+<tr><td><code>athena-resultados/</code></td><td>Athena stores every query result here</td></tr></table>
+<p>For <code>referencia/clientes/</code>: create <code>referencia</code> first, open it and create <code>clientes</code> inside.</p>`) },
+    { title: t("Sube el primer archivo de transacciones", "Upload the first transactions file"),
+      body: t(`<p>Entra a <code>entrada/</code> → <b>Upload</b> → <b>Add files</b> → selecciona <b>solo</b> <code>transacciones_2026_09.csv</code> → <b>Upload</b>.</p><div class="callout warn"><b>Aún NO subas</b> <code>transacciones_2026_10.csv</code>. Lo guardamos para el módulo de EventBridge, donde veremos la automatización dispararse sola.</div>`,
+              `<p>Open <code>entrada/</code> → <b>Upload</b> → <b>Add files</b> → select <b>only</b> <code>transacciones_2026_09.csv</code> → <b>Upload</b>.</p><div class="callout warn"><b>Do NOT upload</b> <code>transacciones_2026_10.csv</code> yet. We keep it for the EventBridge module, where we will watch the automation fire by itself.</div>`) },
+    { title: t("Sube la tabla de clientes", "Upload the customers table"),
+      body: t(`<p>Ve a <code>referencia/clientes/</code> → <b>Upload</b> → <code>clientes.csv</code> → <b>Upload</b>.</p><p>Fíjate en el detalle: separamos los archivos por prefijo porque Athena leerá <b>todo lo que haya dentro de un prefijo como una misma tabla</b>. Si mezcláramos clientes y transacciones en <code>entrada/</code>, las consultas fallarían.</p>`,
+              `<p>Go to <code>referencia/clientes/</code> → <b>Upload</b> → <code>clientes.csv</code> → <b>Upload</b>.</p><p>Notice the detail: we separate files by prefix because Athena will read <b>everything inside a prefix as the same table</b>. If we mixed customers and transactions in <code>entrada/</code>, the queries would break.</p>`) },
+    { title: t("Explora un objeto y comprueba que es privado", "Explore an object and check that it is private"),
+      body: t(`<p>Haz clic en <code>transacciones_2026_09.csv</code>. Observa:</p><ul><li><b>S3 URI:</b> <code>s3://{{BUCKET}}/entrada/transacciones_2026_09.csv</code> → así lo referencian Lambda y Athena.</li><li><b>Object URL:</b> ábrela en una pestaña nueva. Verás <code>AccessDenied</code>. 🎉 ¡Perfecto! Eso es lo que queremos: solo identidades autorizadas (tu usuario, la Lambda) pueden leerlo.</li><li><b>Open</b> (botón): la consola genera una URL firmada temporal y sí te deja verlo, porque tú sí estás autenticado.</li></ul>`,
+              `<p>Click <code>transacciones_2026_09.csv</code>. Notice:</p><ul><li><b>S3 URI:</b> <code>s3://{{BUCKET}}/entrada/transacciones_2026_09.csv</code> → this is how Lambda and Athena will reference it.</li><li><b>Object URL:</b> open it in a new tab. You will see <code>AccessDenied</code>. 🎉 Perfect! That is exactly what we want: only authorized identities (your user, the Lambda) can read it.</li><li><b>Open</b> (button): the console generates a temporary signed URL and does let you see it, because you are authenticated.</li></ul>`) },
+  ],
+  checkpoint: [
+    t("El bucket <code>{{BUCKET}}</code> existe, con “Block all public access: On” y versionado habilitado.", "Bucket <code>{{BUCKET}}</code> exists with “Block all public access: On” and versioning enabled."),
+    t("Hay 1 objeto en <code>entrada/</code> y 1 en <code>referencia/clientes/</code>.", "There is 1 object in <code>entrada/</code> and 1 in <code>referencia/clientes/</code>."),
+    t("La “Object URL” pública devuelve AccessDenied.", "The public “Object URL” returns AccessDenied."),
+  ],
+  trouble: [
+    { q: t("“Bucket name already exists”.", "“Bucket name already exists”."), a: t("Los nombres son globales: alguien en el mundo ya lo usa. Agrega un número (ej: <code>{{BUCKET}}-2</code>) y escribe ese nombre en el panel de configuración para que la guía lo refleje.", "Names are global: someone in the world already uses it. Add a number (e.g. <code>{{BUCKET}}-2</code>) and set it in the setup panel so the guide reflects it.") },
+    { q: t("El nombre da error de formato.", "The name gives a format error."), a: t("Solo minúsculas, números, puntos y guiones; 3 a 63 caracteres; sin mayúsculas ni guion bajo.", "Only lowercase letters, numbers, dots and hyphens; 3 to 63 characters; no uppercase or underscores.") },
+  ]
+},
+/* ------------------------------------------------------------------ 2. DYNAMODB */
+{
+  id:"dynamodb", icon:"ddb", color:"var(--ddb)", mins:15,
+  title: t("Amazon DynamoDB: la base de datos NoSQL", "Amazon DynamoDB: the NoSQL database"),
+  subtitle: t("Crear la tabla, entender PK/SK y consultar ítems", "Create the table, understand PK/SK and query items"),
+  goals: [
+    t("<b>Crear una tabla</b> con clave de partición y clave de ordenamiento.", "<b>Create a table</b> with a partition key and a sort key."),
+    t("<b>Explicar</b> por qué elegimos <code>cliente_id</code> como PK y <code>fecha_id</code> como SK.", "<b>Explain</b> why we chose <code>cliente_id</code> as PK and <code>fecha_id</code> as SK."),
+    t("<b>Diferenciar</b> Query (eficiente) de Scan (lee todo).", "<b>Tell apart</b> Query (efficient) from Scan (reads everything)."),
+  ],
+  concept: t(
+    `<b>PK + SK = la dirección de cada ítem.</b> En DynamoDB no diseñas tablas por “entidades” como en SQL, sino por <b>patrones de acceso</b>: ¿qué preguntas hará la aplicación? La nuestra: <i>“dame las transacciones del cliente X, ordenadas por fecha”</i>.<br><br>
+• <b>Clave de partición (PK)</b> = <code>cliente_id</code>: DynamoDB la usa (con un hash) para decidir en qué partición física guarda el ítem. Todos los ítems del mismo cliente quedan juntos.<br>
+• <b>Clave de ordenamiento (SK)</b> = <code>fecha_id</code> con el formato <code>2026-09-15#TX-0030</code>: dentro del cliente, los ítems quedan ordenados por fecha, y el sufijo <code>#TX-…</code> garantiza que la combinación PK+SK sea única.<br><br>
+Con esto, un <b>Query</b> por <code>cliente_id = CLI-001</code> y <code>fecha_id begins_with 2026-09</code> lee <b>solo</b> los ítems necesarios en milisegundos, sin importar si la tabla tiene 100 o 100 millones de filas.`,
+    `<b>PK + SK = each item's address.</b> In DynamoDB you do not design tables by “entities” like in SQL, but by <b>access patterns</b>: what questions will the application ask? Ours: <i>“give me customer X's transactions, ordered by date”</i>.<br><br>
+• <b>Partition key (PK)</b> = <code>cliente_id</code>: DynamoDB hashes it to decide which physical partition stores the item. All items of the same customer live together.<br>
+• <b>Sort key (SK)</b> = <code>fecha_id</code> with the format <code>2026-09-15#TX-0030</code>: within a customer, items are ordered by date, and the <code>#TX-…</code> suffix guarantees that the PK+SK combination is unique.<br><br>
+With this, a <b>Query</b> for <code>cliente_id = CLI-001</code> and <code>fecha_id begins_with 2026-09</code> reads <b>only</b> the needed items in milliseconds, no matter whether the table has 100 or 100 million rows.`),
+  steps: [
+    { title: t("Crea la tabla", "Create the table"),
+      body: t(`<p>Busca <kbd>DynamoDB</kbd> → <b>Tables</b> → <b>Create table</b>.</p><ul><li><b>Table name:</b> <code>{{TABLE}}</code></li><li><b>Partition key:</b> <code>cliente_id</code> — tipo <b>String</b></li><li><b>Sort key:</b> <code>fecha_id</code> — tipo <b>String</b></li><li><b>Table settings:</b> Customize settings → <b>Capacity mode: On-demand</b> (pagas solo por lo que lees/escribes; ideal para talleres y cargas impredecibles).</li></ul><p>Deja el resto por defecto → <b>Create table</b>. Espera a que el estado sea <b>Active</b> (≈30 segundos).</p>`,
+              `<p>Search <kbd>DynamoDB</kbd> → <b>Tables</b> → <b>Create table</b>.</p><ul><li><b>Table name:</b> <code>{{TABLE}}</code></li><li><b>Partition key:</b> <code>cliente_id</code> — type <b>String</b></li><li><b>Sort key:</b> <code>fecha_id</code> — type <b>String</b></li><li><b>Table settings:</b> Customize settings → <b>Capacity mode: On-demand</b> (pay only for what you read/write; ideal for workshops and unpredictable loads).</li></ul><p>Leave the rest as default → <b>Create table</b>. Wait until the status is <b>Active</b> (≈30 seconds).</p>`) },
+    { title: t("Crea dos ítems a mano", "Create two items by hand"),
+      body: t(`<p>Abre la tabla → <b>Explore table items</b> → <b>Create item</b>. Llena:</p><ul><li><code>cliente_id</code>: <code>CLI-999</code></li><li><code>fecha_id</code>: <code>2026-09-01#TX-PRUEBA-1</code></li><li><b>Add new attribute</b> → Number → nombre <code>monto</code>, valor <code>1000</code></li><li><b>Add new attribute</b> → String → nombre <code>tipo</code>, valor <code>PRUEBA</code></li></ul><p>Clic en <b>Create item</b>. Repite con <code>fecha_id</code> = <code>2026-10-01#TX-PRUEBA-2</code> y <code>monto</code> = <code>2500</code>.</p><div class="callout"><b>Observa:</b> no definiste un “esquema”. Cada ítem puede tener atributos diferentes; solo PK y SK son obligatorios. Eso es NoSQL.</div>`,
+              `<p>Open the table → <b>Explore table items</b> → <b>Create item</b>. Fill in:</p><ul><li><code>cliente_id</code>: <code>CLI-999</code></li><li><code>fecha_id</code>: <code>2026-09-01#TX-PRUEBA-1</code></li><li><b>Add new attribute</b> → Number → name <code>monto</code>, value <code>1000</code></li><li><b>Add new attribute</b> → String → name <code>tipo</code>, value <code>PRUEBA</code></li></ul><p>Click <b>Create item</b>. Repeat with <code>fecha_id</code> = <code>2026-10-01#TX-PRUEBA-2</code> and <code>monto</code> = <code>2500</code>.</p><div class="callout"><b>Notice:</b> you did not define a “schema”. Every item can have different attributes; only PK and SK are mandatory. That is NoSQL.</div>`) },
+    { title: t("Haz un Query (la forma correcta de leer)", "Run a Query (the right way to read)"),
+      body: t(`<p>En <b>Explore table items</b> → despliega <b>Scan or query items</b> → selecciona <b>Query</b>.</p><ul><li><b>cliente_id (Partition key):</b> <code>CLI-999</code> → <b>Run</b>. Resultado: tus 2 ítems, ordenados por <code>fecha_id</code>.</li><li>Ahora agrega la condición de <b>Sort key</b>: <code>begins_with</code> → <code>2026-09</code> → <b>Run</b>. Resultado: solo 1 ítem (el de septiembre).</li></ul><p>Eso es exactamente lo que hará el negocio: “transacciones de un cliente en un mes”.</p>`,
+              `<p>In <b>Explore table items</b> → expand <b>Scan or query items</b> → select <b>Query</b>.</p><ul><li><b>cliente_id (Partition key):</b> <code>CLI-999</code> → <b>Run</b>. Result: your 2 items, ordered by <code>fecha_id</code>.</li><li>Now add the <b>Sort key</b> condition: <code>begins_with</code> → <code>2026-09</code> → <b>Run</b>. Result: only 1 item (the September one).</li></ul><p>That is exactly what the business will ask: “one customer's transactions in a month”.</p>`) },
+    { title: t("Compara con un Scan", "Compare with a Scan"),
+      body: t(`<p>Cambia a <b>Scan</b> → <b>Run</b>. Trae todos los ítems de la tabla. Con 2 ítems da igual, pero con millones un Scan lee (y cobra) <b>toda</b> la tabla. Regla de oro: <b>Query siempre que se pueda; Scan solo para análisis puntuales</b>. Para preguntas por otros atributos (ej: “todas las transacciones RECHAZADAS”) se crean <b>índices secundarios globales (GSI)</b>, tema para otra sesión.</p>`,
+              `<p>Switch to <b>Scan</b> → <b>Run</b>. It returns every item in the table. With 2 items it does not matter, but with millions a Scan reads (and bills) the <b>whole</b> table. Golden rule: <b>Query whenever possible; Scan only for one-off analysis</b>. For questions on other attributes (e.g. “all REJECTED transactions”) you create <b>Global Secondary Indexes (GSI)</b>, a topic for another session.</p>`) },
+    { title: t("Borra los ítems de prueba", "Delete the test items"),
+      body: t(`<p>Selecciona los 2 ítems <code>CLI-999</code> → <b>Actions</b> → <b>Delete items</b>. Dejamos la tabla vacía para que la Lambda la llene con datos reales.</p>`,
+              `<p>Select the 2 <code>CLI-999</code> items → <b>Actions</b> → <b>Delete items</b>. We leave the table empty so the Lambda fills it with real data.</p>`) },
+  ],
+  checkpoint: [
+    t("La tabla <code>{{TABLE}}</code> está Active, con PK <code>cliente_id</code> (S) y SK <code>fecha_id</code> (S).", "Table <code>{{TABLE}}</code> is Active, with PK <code>cliente_id</code> (S) and SK <code>fecha_id</code> (S)."),
+    t("Puedo explicar con mis palabras la diferencia entre Query y Scan.", "I can explain in my own words the difference between Query and Scan."),
+    t("La tabla quedó vacía (ítems de prueba borrados).", "The table is empty again (test items deleted)."),
+  ],
+  trouble: [
+    { q: t("Escribí mal el nombre de la PK o SK.", "I misspelled the PK or SK name."), a: t("Las claves no se pueden editar después. Borra la tabla (Actions → Delete table) y créala de nuevo; toma 1 minuto.", "Keys cannot be edited afterwards. Delete the table (Actions → Delete table) and create it again; it takes 1 minute.") },
+    { q: t("¿Por qué el monto es Number y no String?", "Why is monto a Number and not a String?"), a: t("Para poder sumar/comparar. En el CSV todo llega como texto y la Lambda lo convierte con <code>Decimal()</code>.", "So we can sum/compare. In the CSV everything arrives as text and the Lambda converts it with <code>Decimal()</code>.") },
+  ]
+},
+/* ------------------------------------------------------------------ 3. SES */
+{
+  id:"ses", icon:"ses", color:"var(--ses)", mins:10,
+  title: t("Amazon SES: correo desde la nube", "Amazon SES: email from the cloud"),
+  subtitle: t("Verificar tu identidad y enviar un correo de prueba", "Verify your identity and send a test email"),
+  goals: [
+    t("<b>Verificar</b> una dirección de correo como identidad de SES.", "<b>Verify</b> an email address as an SES identity."),
+    t("<b>Entender el sandbox</b>: por qué solo puedes enviar a correos verificados.", "<b>Understand the sandbox</b>: why you can only send to verified addresses."),
+    t("<b>Enviar</b> un correo de prueba desde la consola.", "<b>Send</b> a test email from the console."),
+  ],
+  concept: t(
+    `<b>SES (Simple Email Service)</b> es el servicio para enviar correos transaccionales (notificaciones, alertas, reportes) desde tus aplicaciones. Toda cuenta nueva empieza en <b>modo sandbox</b>: solo puedes enviar <b>desde</b> y <b>hacia</b> identidades verificadas, máximo 200 correos/día. Es una protección anti-spam. Para producción se solicita la salida del sandbox y se verifica un <b>dominio</b> completo (con DKIM y SPF) en vez de correos individuales.`,
+    `<b>SES (Simple Email Service)</b> is the service to send transactional email (notifications, alerts, reports) from your applications. Every new account starts in <b>sandbox mode</b>: you can only send <b>from</b> and <b>to</b> verified identities, max 200 emails/day. It is an anti-spam protection. For production you request to leave the sandbox and verify a whole <b>domain</b> (with DKIM and SPF) instead of individual addresses.`),
+  steps: [
+    { title: t("Revisa si tu correo ya está verificado", "Check whether your email is already verified"),
+      body: t(`<p>Busca <kbd>Amazon SES</kbd> (o “Simple Email Service”) → menú izquierdo <b>Identities</b>.</p><p>Si tu instructor desplegó esta guía con la lista de participantes, es posible que <code>{{EMAIL}}</code> ya aparezca aquí con estado <b>Verified</b> o <b>Verification pending</b>. En este segundo caso, busca en tu bandeja (y en spam) un correo de <i>Amazon Web Services</i> titulado <b>“Email Address Verification Request”</b> y haz clic en el enlace.</p><div id="sesParticipants"></div>`,
+              `<p>Search <kbd>Amazon SES</kbd> (or “Simple Email Service”) → left menu <b>Identities</b>.</p><p>If your instructor deployed this guide with the participant list, <code>{{EMAIL}}</code> may already appear here as <b>Verified</b> or <b>Verification pending</b>. In the latter case, look in your inbox (and spam) for an email from <i>Amazon Web Services</i> titled <b>“Email Address Verification Request”</b> and click the link.</p><div id="sesParticipants"></div>`) },
+    { title: t("Si no está: crea la identidad", "If it is not there: create the identity"),
+      body: t(`<p><b>Create identity</b> → <b>Identity type: Email address</b> → escribe <code>{{EMAIL}}</code> → <b>Create identity</b>.</p><p>Revisa tu correo y haz clic en el enlace de verificación. Vuelve a la consola y refresca: el estado debe pasar a <b>Verified</b>.</p><div class="callout tip"><b>Tip:</b> usa un correo al que tengas acceso <i>ahora</i>; lo necesitarás en 2 minutos.</div>`,
+              `<p><b>Create identity</b> → <b>Identity type: Email address</b> → type <code>{{EMAIL}}</code> → <b>Create identity</b>.</p><p>Check your email and click the verification link. Back in the console, refresh: the status should become <b>Verified</b>.</p><div class="callout tip"><b>Tip:</b> use an address you can open <i>right now</i>; you will need it in 2 minutes.</div>`) },
+    { title: t("Envía un correo de prueba desde la consola", "Send a test email from the console"),
+      body: t(`<p>Haz clic en tu identidad → botón <b>Send test email</b>.</p><ul><li><b>Email format:</b> Formatted</li><li><b>From-address:</b> (tu correo)</li><li><b>Scenario:</b> Custom</li><li><b>Custom recipient:</b> <code>{{EMAIL}}</code> (¡el mismo, porque estamos en sandbox!)</li><li><b>Subject:</b> Hola desde SES</li><li><b>Body:</b> Mi primer correo enviado desde AWS 🚀</li></ul><p><b>Send test email</b> → revisa tu bandeja.</p>`,
+              `<p>Click your identity → <b>Send test email</b> button.</p><ul><li><b>Email format:</b> Formatted</li><li><b>From-address:</b> (your email)</li><li><b>Scenario:</b> Custom</li><li><b>Custom recipient:</b> <code>{{EMAIL}}</code> (the same one, because we are in the sandbox!)</li><li><b>Subject:</b> Hello from SES</li><li><b>Body:</b> My first email sent from AWS 🚀</li></ul><p><b>Send test email</b> → check your inbox.</p>`) },
+  ],
+  checkpoint: [
+    t("Mi identidad <code>{{EMAIL}}</code> aparece como <b>Verified</b>.", "My identity <code>{{EMAIL}}</code> shows as <b>Verified</b>."),
+    t("Recibí el correo de prueba (revisa spam si no lo ves).", "I received the test email (check spam if you do not see it)."),
+  ],
+  trouble: [
+    { q: t("“Email address is not verified” al enviar.", "“Email address is not verified” when sending."), a: t("En sandbox, remitente Y destinatario deben estar verificados. Verifica el destinatario también.", "In the sandbox, sender AND recipient must both be verified. Verify the recipient too.") },
+    { q: t("No me llega el correo de verificación.", "The verification email never arrives."), a: t("Revisa spam/promociones, espera 2 minutos, o en la consola usa “Resend verification”. Algunos correos corporativos bloquean remitentes desconocidos: usa uno personal.", "Check spam/promotions, wait 2 minutes, or use “Resend verification” in the console. Some corporate mailboxes block unknown senders: use a personal one.") },
+  ]
+},
+/* ------------------------------------------------------------------ 4. LAMBDA */
+{
+  id:"lambda", icon:"lambda", color:"var(--lambda)", mins:25,
+  title: t("AWS Lambda: código sin servidores (Python)", "AWS Lambda: code without servers (Python)"),
+  subtitle: t("Crear la función, darle permisos, configurarla y probarla", "Create the function, grant permissions, configure and test it"),
+  goals: [
+    t("<b>Crear una función</b> Lambda en Python 3.13 desde la consola.", "<b>Create a Lambda function</b> in Python 3.13 from the console."),
+    t("<b>Entender</b> handler, evento, rol de ejecución, variables de entorno y logs.", "<b>Understand</b> handler, event, execution role, environment variables and logs."),
+    t("<b>Procesar</b> el CSV de S3 → DynamoDB → correo con SES, con un evento de prueba.", "<b>Process</b> the CSV from S3 → DynamoDB → SES email, using a test event."),
+  ],
+  concept: t(
+    `<b>Lambda ejecuta tu código solo cuando pasa algo.</b> No administras servidores: subes una función, defines qué la <b>dispara</b> (un evento) y AWS se encarga de ejecutarla, escalarla y cobrarte por milisegundo de uso. Piezas clave:<br>
+• <b>Handler</b>: la función Python que AWS llama: <code>lambda_handler(event, context)</code>.<br>
+• <b>Evento</b>: un JSON con la información de “lo que pasó” (hoy: qué archivo llegó a S3).<br>
+• <b>Rol de ejecución (IAM)</b>: la identidad de la función. Si la Lambda no tiene permiso para leer S3 o escribir DynamoDB, fallará con <code>AccessDenied</code>. <b>El código no tiene credenciales; el rol se las presta.</b><br>
+• <b>Variables de entorno</b>: configuración fuera del código (nombre de tabla, correos). Así el mismo código sirve para dev/prod.<br>
+• <b>CloudWatch Logs</b>: todo <code>print()</code> queda registrado ahí. Es tu mejor amigo para depurar.`,
+    `<b>Lambda runs your code only when something happens.</b> You manage no servers: you upload a function, define what <b>triggers</b> it (an event) and AWS runs it, scales it and bills you per millisecond of use. Key pieces:<br>
+• <b>Handler</b>: the Python function AWS calls: <code>lambda_handler(event, context)</code>.<br>
+• <b>Event</b>: a JSON with the information about “what happened” (today: which file landed in S3).<br>
+• <b>Execution role (IAM)</b>: the function's identity. If the Lambda lacks permission to read S3 or write DynamoDB, it fails with <code>AccessDenied</code>. <b>The code holds no credentials; the role lends them.</b><br>
+• <b>Environment variables</b>: configuration outside the code (table name, emails). The same code then works for dev/prod.<br>
+• <b>CloudWatch Logs</b>: every <code>print()</code> is recorded there. Your best friend for debugging.`),
+  steps: [
+    { title: t("Crea la función", "Create the function"),
+      body: t(`<p>Busca <kbd>Lambda</kbd> → <b>Create function</b> → <b>Author from scratch</b>.</p><ul><li><b>Function name:</b> <code>{{FN}}</code></li><li><b>Runtime:</b> Python 3.13</li><li><b>Architecture:</b> arm64 (más barato y eficiente)</li><li><b>Permissions:</b> deja “Create a new role with basic Lambda permissions” (le daremos más permisos en el paso 4).</li></ul><p><b>Create function</b>.</p>`,
+              `<p>Search <kbd>Lambda</kbd> → <b>Create function</b> → <b>Author from scratch</b>.</p><ul><li><b>Function name:</b> <code>{{FN}}</code></li><li><b>Runtime:</b> Python 3.13</li><li><b>Architecture:</b> arm64 (cheaper and efficient)</li><li><b>Permissions:</b> keep “Create a new role with basic Lambda permissions” (we add more permissions in step 4).</li></ul><p><b>Create function</b>.</p>`) },
+    { title: t("Pega el código y despliégalo", "Paste the code and deploy it"),
+      body: t(`<p>En la pestaña <b>Code</b>, borra el contenido de <code>lambda_function.py</code>, pega el siguiente código completo y haz clic en <b>Deploy</b> (o <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>).</p>
+<details><summary>¿Qué hace el código? (léelo con calma, está comentado)</summary><ol><li><code>extraer_bucket_y_key</code>: saca el bucket y la clave del archivo, tanto si el evento viene de EventBridge como si es un evento de prueba manual.</li><li><code>leer_csv</code>: descarga el objeto de S3 y lo convierte en una lista de diccionarios (una fila = un dict).</li><li><code>guardar_en_dynamodb</code>: arma <code>fecha_id = fecha#id_transaccion</code> y escribe todo en lotes (<code>batch_writer</code>).</li><li><code>construir_resumen</code>: totales por estado y por tipo.</li><li><code>enviar_correo</code>: SES envía el resumen en texto plano.</li></ol></details>`,
+              `<p>In the <b>Code</b> tab, delete the content of <code>lambda_function.py</code>, paste the whole code below and click <b>Deploy</b> (or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>).</p>
+<details><summary>What does the code do? (read it calmly, it is commented)</summary><ol><li><code>extraer_bucket_y_key</code>: extracts the bucket and the file key, whether the event comes from EventBridge or is a manual test event.</li><li><code>leer_csv</code>: downloads the S3 object and turns it into a list of dictionaries (one row = one dict).</li><li><code>guardar_en_dynamodb</code>: builds <code>fecha_id = fecha#id_transaccion</code> and writes everything in batches (<code>batch_writer</code>).</li><li><code>construir_resumen</code>: totals by status and by type.</li><li><code>enviar_correo</code>: SES sends the summary as plain text.</li></ol></details>`),
+      code: { name:"lambda_function.py", text: LAMBDA_CODE } },
+    { title: t("Configura las variables de entorno", "Configure the environment variables"),
+      body: t(`<p>Pestaña <b>Configuration</b> → <b>Environment variables</b> → <b>Edit</b> → <b>Add environment variable</b> (tres veces):</p>
+<table><tr><th>Key</th><th>Value</th></tr>
+<tr><td><code>TABLE_NAME</code></td><td><code>{{TABLE}}</code></td></tr>
+<tr><td><code>SENDER_EMAIL</code></td><td><code>{{EMAIL}}</code></td></tr>
+<tr><td><code>DESTINATION_EMAIL</code></td><td><code>{{EMAIL}}</code></td></tr></table><p><b>Save</b>.</p>`,
+              `<p><b>Configuration</b> tab → <b>Environment variables</b> → <b>Edit</b> → <b>Add environment variable</b> (three times):</p>
+<table><tr><th>Key</th><th>Value</th></tr>
+<tr><td><code>TABLE_NAME</code></td><td><code>{{TABLE}}</code></td></tr>
+<tr><td><code>SENDER_EMAIL</code></td><td><code>{{EMAIL}}</code></td></tr>
+<tr><td><code>DESTINATION_EMAIL</code></td><td><code>{{EMAIL}}</code></td></tr></table><p><b>Save</b>.</p>`) },
+    { title: t("Dale permisos al rol de ejecución", "Grant permissions to the execution role"),
+      body: t(`<p><b>Configuration</b> → <b>Permissions</b> → haz clic en el nombre del rol (se abre IAM en otra pestaña) → <b>Add permissions</b> → <b>Attach policies</b>. Busca y marca estas tres políticas administradas por AWS:</p><ul><li><code>AmazonS3ReadOnlyAccess</code></li><li><code>AmazonDynamoDBFullAccess</code></li><li><code>AmazonSESFullAccess</code></li></ul><p><b>Add permissions</b>.</p>
+<div class="callout warn"><b>Atajo de taller, no de producción.</b> Estas políticas son amplias. En producción se aplica <b>mínimo privilegio</b>: solo <code>s3:GetObject</code> sobre <code>{{BUCKET}}/entrada/*</code>, solo <code>dynamodb:PutItem/BatchWriteItem</code> sobre tu tabla y solo <code>ses:SendEmail</code>. Abajo tienes la política exacta como ejemplo.</div>
+<details><summary>Política de mínimo privilegio (referencia)</summary><div class="codewrap has-name"><span class="filename">politica_iam_lambda.json</span><pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "LeerCSVDesdeS3", "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::{{BUCKET}}/entrada/*" },
+    { "Sid": "EscribirEnDynamoDB", "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:BatchWriteItem"],
+      "Resource": "arn:aws:dynamodb:*:*:table/{{TABLE}}" },
+    { "Sid": "EnviarCorreoSES", "Effect": "Allow",
+      "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+      "Resource": "*" }
+  ]
+}</code></pre></div></details>`,
+              `<p><b>Configuration</b> → <b>Permissions</b> → click the role name (IAM opens in another tab) → <b>Add permissions</b> → <b>Attach policies</b>. Search and tick these three AWS managed policies:</p><ul><li><code>AmazonS3ReadOnlyAccess</code></li><li><code>AmazonDynamoDBFullAccess</code></li><li><code>AmazonSESFullAccess</code></li></ul><p><b>Add permissions</b>.</p>
+<div class="callout warn"><b>Workshop shortcut, not production.</b> These policies are broad. In production you apply <b>least privilege</b>: only <code>s3:GetObject</code> on <code>{{BUCKET}}/entrada/*</code>, only <code>dynamodb:PutItem/BatchWriteItem</code> on your table and only <code>ses:SendEmail</code>. Below is the exact policy as an example.</div>
+<details><summary>Least-privilege policy (reference)</summary><div class="codewrap has-name"><span class="filename">politica_iam_lambda.json</span><pre><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "LeerCSVDesdeS3", "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::{{BUCKET}}/entrada/*" },
+    { "Sid": "EscribirEnDynamoDB", "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:BatchWriteItem"],
+      "Resource": "arn:aws:dynamodb:*:*:table/{{TABLE}}" },
+    { "Sid": "EnviarCorreoSES", "Effect": "Allow",
+      "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+      "Resource": "*" }
+  ]
+}</code></pre></div></details>`) },
+    { title: t("Sube el timeout a 30 segundos", "Raise the timeout to 30 seconds"),
+      body: t(`<p>De vuelta en Lambda: <b>Configuration</b> → <b>General configuration</b> → <b>Edit</b> → <b>Timeout:</b> 0 min 30 sec → <b>Save</b>. El valor por defecto (3 s) es poco para leer S3, escribir 30 ítems y enviar un correo. La memoria en 128 MB está bien.</p>`,
+              `<p>Back in Lambda: <b>Configuration</b> → <b>General configuration</b> → <b>Edit</b> → <b>Timeout:</b> 0 min 30 sec → <b>Save</b>. The default (3 s) is too short to read S3, write 30 items and send an email. 128 MB of memory is fine.</p>`) },
+    { title: t("Crea un evento de prueba", "Create a test event"),
+      body: t(`<p>Pestaña <b>Test</b> → <b>Create new event</b>:</p><ul><li><b>Event name:</b> <code>prueba-csv</code></li><li><b>Event JSON:</b> reemplaza todo por:</li></ul>`,
+              `<p><b>Test</b> tab → <b>Create new event</b>:</p><ul><li><b>Event name:</b> <code>prueba-csv</code></li><li><b>Event JSON:</b> replace everything with:</li></ul>`),
+      code: { name:"evento_prueba.json", text:`{
+  "bucket": "{{BUCKET}}",
+  "key": "entrada/transacciones_2026_09.csv"
+}` } },
+    { title: t("Ejecuta la prueba y lee los logs", "Run the test and read the logs"),
+      body: t(`<p><b>Save</b> → <b>Test</b>. En unos segundos verás <b>Executing function: succeeded</b>. Despliega <b>Details</b>:</p><ul><li><b>Response:</b> <code>{"status": "OK", "archivo": "entrada/transacciones_2026_09.csv", "transacciones": 30, ...}</code></li><li><b>Function Logs:</b> el evento recibido, el resumen impreso, la duración (<i>Duration</i>) y la memoria usada (<i>Max Memory Used</i>).</li></ul><p>Para ver logs históricos: pestaña <b>Monitor</b> → <b>View CloudWatch logs</b>.</p>`,
+              `<p><b>Save</b> → <b>Test</b>. In a few seconds you will see <b>Executing function: succeeded</b>. Expand <b>Details</b>:</p><ul><li><b>Response:</b> <code>{"status": "OK", "archivo": "entrada/transacciones_2026_09.csv", "transacciones": 30, ...}</code></li><li><b>Function Logs:</b> the received event, the printed summary, the duration (<i>Duration</i>) and the memory used (<i>Max Memory Used</i>).</li></ul><p>For historical logs: <b>Monitor</b> tab → <b>View CloudWatch logs</b>.</p>`) },
+    { title: t("Verifica DynamoDB y tu correo", "Verify DynamoDB and your inbox"),
+      body: t(`<p>Ve a DynamoDB → <code>{{TABLE}}</code> → <b>Explore table items</b> → <b>Scan</b> → deberías ver <b>30 ítems</b>. Haz un <b>Query</b> con <code>cliente_id = CLI-001</code>: 6 transacciones de Ana María ordenadas por fecha. 😍</p><p>Revisa tu correo: llegó <b>“[Workshop AWS] Resumen de entrada/transacciones_2026_09.csv”</b> con los totales.</p>`,
+              `<p>Go to DynamoDB → <code>{{TABLE}}</code> → <b>Explore table items</b> → <b>Scan</b> → you should see <b>30 items</b>. Run a <b>Query</b> with <code>cliente_id = CLI-001</code>: 6 transactions of Ana María ordered by date. 😍</p><p>Check your inbox: <b>“[Workshop AWS] Resumen de entrada/transacciones_2026_09.csv”</b> arrived with the totals.</p>`) },
+  ],
+  checkpoint: [
+    t("La prueba devuelve <code>status: OK</code> y <code>transacciones: 30</code>.", "The test returns <code>status: OK</code> and <code>transacciones: 30</code>."),
+    t("DynamoDB tiene 30 ítems y un Query por CLI-001 devuelve 6.", "DynamoDB holds 30 items and a Query by CLI-001 returns 6."),
+    t("Recibí el correo con el resumen.", "I received the summary email."),
+  ],
+  trouble: [
+    { q: t("<code>AccessDenied</code> / <code>not authorized to perform: s3:GetObject</code> (o dynamodb:BatchWriteItem).", "<code>AccessDenied</code> / <code>not authorized to perform: s3:GetObject</code> (or dynamodb:BatchWriteItem)."), a: t("Falta una política en el rol (paso 4). Agrégala y vuelve a probar; los cambios en IAM tardan unos segundos.", "A policy is missing on the role (step 4). Attach it and test again; IAM changes take a few seconds.") },
+    { q: t("<code>MessageRejected: Email address is not verified</code>.", "<code>MessageRejected: Email address is not verified</code>."), a: t("Remitente y destinatario deben estar verificados en SES <b>en esta misma región</b>. Revisa el módulo SES.", "Sender and recipient must be verified in SES <b>in this same region</b>. Revisit the SES module.") },
+    { q: t("<code>KeyError: 'TABLE_NAME'</code>.", "<code>KeyError: 'TABLE_NAME'</code>."), a: t("Faltan las variables de entorno (paso 3) o tienen otro nombre exacto.", "Environment variables are missing (step 3) or spelled differently.") },
+    { q: t("<code>Task timed out after 3.00 seconds</code>.", "<code>Task timed out after 3.00 seconds</code>."), a: t("No aplicaste el paso 5 (timeout 30 s).", "You skipped step 5 (30 s timeout).") },
+    { q: t("<code>NoSuchKey</code> o <code>NoSuchBucket</code>.", "<code>NoSuchKey</code> or <code>NoSuchBucket</code>."), a: t("Revisa el nombre exacto del bucket y de la clave en el evento de prueba (incluye el prefijo <code>entrada/</code>).", "Check the exact bucket name and key in the test event (including the <code>entrada/</code> prefix).") },
+  ]
+},
+/* ------------------------------------------------------------------ 5. EVENTBRIDGE */
+{
+  id:"eventbridge", icon:"evb", color:"var(--evb)", mins:15,
+  title: t("Amazon EventBridge: la automatización se dispara sola", "Amazon EventBridge: the automation fires by itself"),
+  subtitle: t("Conectar S3 → EventBridge → Lambda con una regla", "Wire S3 → EventBridge → Lambda with a rule"),
+  goals: [
+    t("<b>Activar</b> las notificaciones de S3 hacia EventBridge.", "<b>Enable</b> S3 notifications to EventBridge."),
+    t("<b>Crear una regla</b> con un patrón de evento filtrado por bucket y prefijo.", "<b>Create a rule</b> with an event pattern filtered by bucket and prefix."),
+    t("<b>Ver la magia</b>: subir un CSV y que todo ocurra sin tocar nada.", "<b>Watch the magic</b>: upload a CSV and have everything happen hands-free."),
+  ],
+  concept: t(
+    `<b>EventBridge es el “sistema nervioso” de la arquitectura por eventos.</b> Los servicios de AWS (y tus apps) publican <b>eventos</b> (JSON que describe algo que pasó) en un <b>bus</b>. Tú creas <b>reglas</b> con un <b>patrón</b> (filtro) y uno o más <b>destinos</b> (Lambda, SQS, Step Functions, otro bus…). Ventaja enorme: el productor (S3) no sabe nada del consumidor (Lambda). Mañana puedes agregar un segundo destino sin tocar S3 ni la Lambda: <b>desacoplamiento</b>.`,
+    `<b>EventBridge is the “nervous system” of event-driven architecture.</b> AWS services (and your apps) publish <b>events</b> (JSON describing something that happened) on a <b>bus</b>. You create <b>rules</b> with a <b>pattern</b> (filter) and one or more <b>targets</b> (Lambda, SQS, Step Functions, another bus…). Huge advantage: the producer (S3) knows nothing about the consumer (Lambda). Tomorrow you can add a second target without touching S3 or the Lambda: <b>decoupling</b>.`),
+  steps: [
+    { title: t("Activa EventBridge en el bucket", "Turn on EventBridge on the bucket"),
+      body: t(`<p>S3 → bucket <code>{{BUCKET}}</code> → pestaña <b>Properties</b> → sección <b>Amazon EventBridge</b> → <b>Edit</b> → <b>Send notifications to Amazon EventBridge for all events in this bucket: On</b> → <b>Save changes</b>.</p><p>Desde ahora, cada objeto creado, borrado o modificado genera un evento en el bus <b>default</b> de tu cuenta.</p>`,
+              `<p>S3 → bucket <code>{{BUCKET}}</code> → <b>Properties</b> tab → <b>Amazon EventBridge</b> section → <b>Edit</b> → <b>Send notifications to Amazon EventBridge for all events in this bucket: On</b> → <b>Save changes</b>.</p><p>From now on, every object created, deleted or modified generates an event on your account's <b>default</b> bus.</p>`) },
+    { title: t("Crea la regla", "Create the rule"),
+      body: t(`<p>Busca <kbd>EventBridge</kbd> → <b>Rules</b> → <b>Create rule</b>.</p><ul><li><b>Name:</b> <code>{{RULE}}</code></li><li><b>Event bus:</b> default</li><li><b>Rule type:</b> Rule with an event pattern → <b>Next</b>.</li></ul>`,
+              `<p>Search <kbd>EventBridge</kbd> → <b>Rules</b> → <b>Create rule</b>.</p><ul><li><b>Name:</b> <code>{{RULE}}</code></li><li><b>Event bus:</b> default</li><li><b>Rule type:</b> Rule with an event pattern → <b>Next</b>.</li></ul>`) },
+    { title: t("Define el patrón de evento", "Define the event pattern"),
+      body: t(`<p>En <b>Event source</b> deja <b>AWS events or EventBridge partner events</b>. Baja hasta <b>Creation method</b> → <b>Custom pattern (JSON editor)</b> y pega:</p>`,
+              `<p>Under <b>Event source</b> keep <b>AWS events or EventBridge partner events</b>. Scroll to <b>Creation method</b> → <b>Custom pattern (JSON editor)</b> and paste:</p>`),
+      code: { name:"patron_evento.json", text:`{
+  "source": ["aws.s3"],
+  "detail-type": ["Object Created"],
+  "detail": {
+    "bucket": { "name": ["{{BUCKET}}"] },
+    "object": { "key": [{ "prefix": "entrada/" }] }
+  }
+}` },
+      after: t(`<p>Léelo como una frase: <i>“cuando S3 diga que se creó un objeto, en mi bucket, y su clave empiece por <code>entrada/</code>”</i>. Así, subir un archivo a <code>referencia/</code> o a <code>athena-resultados/</code> <b>no</b> dispara la Lambda. Clic en <b>Next</b>.</p>`,
+               `<p>Read it as a sentence: <i>“when S3 says an object was created, in my bucket, and its key starts with <code>entrada/</code>”</i>. This way, uploading a file to <code>referencia/</code> or <code>athena-resultados/</code> does <b>not</b> trigger the Lambda. Click <b>Next</b>.</p>`) },
+    { title: t("Elige la Lambda como destino", "Choose the Lambda as target"),
+      body: t(`<p><b>Target types:</b> AWS service → <b>Select a target:</b> Lambda function → <b>Function:</b> <code>{{FN}}</code> → <b>Next</b> → (Tags) <b>Next</b> → revisa y <b>Create rule</b>.</p><p>EventBridge agrega automáticamente el permiso para invocar tu Lambda (puedes verlo en Lambda → Configuration → Permissions → Resource-based policy).</p>`,
+              `<p><b>Target types:</b> AWS service → <b>Select a target:</b> Lambda function → <b>Function:</b> <code>{{FN}}</code> → <b>Next</b> → (Tags) <b>Next</b> → review and <b>Create rule</b>.</p><p>EventBridge automatically adds the permission to invoke your Lambda (see Lambda → Configuration → Permissions → Resource-based policy).</p>`) },
+    { title: t("🎬 Momento de la verdad: sube el CSV de octubre", "🎬 Moment of truth: upload the October CSV"),
+      body: t(`<p>S3 → <code>{{BUCKET}}</code> → <code>entrada/</code> → <b>Upload</b> → <code>transacciones_2026_10.csv</code> → <b>Upload</b>.</p><p>No hagas nada más. Espera 10 segundos y…</p>`,
+              `<p>S3 → <code>{{BUCKET}}</code> → <code>entrada/</code> → <b>Upload</b> → <code>transacciones_2026_10.csv</code> → <b>Upload</b>.</p><p>Do nothing else. Wait 10 seconds and…</p>`) },
+    { title: t("Verifica la cadena completa", "Verify the whole chain"),
+      body: t(`<ol><li><b>Correo:</b> te llegó “[Workshop AWS] Resumen de entrada/transacciones_2026_10.csv” con 15 transacciones.</li><li><b>DynamoDB:</b> Scan → ahora hay <b>45 ítems</b>.</li><li><b>Lambda → Monitor:</b> aparece 1 invocación nueva; <b>View CloudWatch logs</b> → el evento impreso ahora tiene <code>"source": "aws.s3"</code> y <code>"detail-type": "Object Created"</code>: ese es el evento real de EventBridge.</li><li><b>EventBridge → Rules → {{RULE}} → Monitoring:</b> la métrica <i>Invocations</i> subió a 1.</li></ol><div class="callout tip"><b>Lo que acabas de construir</b> es un pipeline serverless por eventos: cero servidores, cero cron jobs, cero “revisar si llegó el archivo”. Escala solo y cuesta centavos.</div>`,
+              `<ol><li><b>Email:</b> you received “[Workshop AWS] Resumen de entrada/transacciones_2026_10.csv” with 15 transactions.</li><li><b>DynamoDB:</b> Scan → now there are <b>45 items</b>.</li><li><b>Lambda → Monitor:</b> 1 new invocation; <b>View CloudWatch logs</b> → the printed event now has <code>"source": "aws.s3"</code> and <code>"detail-type": "Object Created"</code>: that is the real EventBridge event.</li><li><b>EventBridge → Rules → {{RULE}} → Monitoring:</b> the <i>Invocations</i> metric went up to 1.</li></ol><div class="callout tip"><b>What you just built</b> is a serverless, event-driven pipeline: zero servers, zero cron jobs, zero “check if the file arrived”. It scales by itself and costs cents.</div>`) },
+  ],
+  checkpoint: [
+    t("La regla <code>{{RULE}}</code> está Enabled con destino <code>{{FN}}</code>.", "Rule <code>{{RULE}}</code> is Enabled with target <code>{{FN}}</code>."),
+    t("Subir el CSV de octubre disparó la Lambda sin intervención manual.", "Uploading the October CSV triggered the Lambda with no manual action."),
+    t("DynamoDB tiene 45 ítems y recibí el segundo correo.", "DynamoDB holds 45 items and I received the second email."),
+  ],
+  trouble: [
+    { q: t("No pasó nada al subir el archivo.", "Nothing happened when uploading the file."), a: t("1) ¿Activaste EventBridge en las <i>Properties</i> del bucket? 2) ¿El nombre del bucket en el patrón es exacto? 3) ¿Subiste dentro de <code>entrada/</code>? 4) ¿Regla y Lambda están en la misma región?", "1) Did you turn on EventBridge in the bucket <i>Properties</i>? 2) Is the bucket name in the pattern exact? 3) Did you upload inside <code>entrada/</code>? 4) Are rule and Lambda in the same region?") },
+    { q: t("La Lambda se invocó pero falló.", "The Lambda was invoked but failed."), a: t("Lee el error en CloudWatch Logs; casi siempre es lo mismo que en el módulo Lambda (permisos, SES o timeout).", "Read the error in CloudWatch Logs; it is almost always the same as in the Lambda module (permissions, SES or timeout).") },
+    { q: t("Se ejecutó dos veces.", "It ran twice."), a: t("Si subiste el mismo archivo dos veces, o si usaste “Upload” con varios archivos, cada objeto creado genera su evento. Es el comportamiento esperado.", "If you uploaded the same file twice, or used “Upload” with several files, every created object generates its own event. That is expected.") },
+  ]
+},
+/* ------------------------------------------------------------------ 6. ATHENA */
+{
+  id:"athena", icon:"athena", color:"var(--athena)", mins:15,
+  title: t("Amazon Athena: SQL directo sobre S3", "Amazon Athena: SQL straight on S3"),
+  subtitle: t("Crear tablas externas sobre los CSV y analizarlos con SQL", "Create external tables over the CSVs and analyze them with SQL"),
+  goals: [
+    t("<b>Configurar</b> la ubicación de resultados de Athena.", "<b>Configure</b> the Athena query result location."),
+    t("<b>Crear</b> una base de datos y tablas externas sobre los prefijos de S3.", "<b>Create</b> a database and external tables over the S3 prefixes."),
+    t("<b>Ejecutar</b> agregaciones y un JOIN, y entender qué se cobra.", "<b>Run</b> aggregations and a JOIN, and understand what you pay for."),
+  ],
+  concept: t(
+    `<b>Athena no mueve tus datos.</b> Es un motor SQL serverless que lee directamente los archivos en S3. Le describes la <b>estructura</b> (columnas y formato) en una tabla “externa” que se guarda en el <b>catálogo de datos de AWS Glue</b>, y a partir de ahí escribes SQL estándar. Esto se llama <b>schema-on-read</b>: el CSV no cambió, solo le pusimos “gafas” de tabla. Pagas por <b>datos escaneados</b> (≈ USD 5 por TB); con nuestros KB el costo es prácticamente cero. Cada consulta escribe su resultado (un CSV) en el prefijo <code>athena-resultados/</code>.`,
+    `<b>Athena does not move your data.</b> It is a serverless SQL engine that reads the files directly in S3. You describe the <b>structure</b> (columns and format) in an “external” table stored in the <b>AWS Glue Data Catalog</b>, and from there you write standard SQL. This is called <b>schema-on-read</b>: the CSV did not change, we just put “table glasses” on it. You pay per <b>data scanned</b> (≈ USD 5 per TB); with our few KB the cost is practically zero. Every query writes its result (a CSV) to the <code>athena-resultados/</code> prefix.`),
+  steps: [
+    { title: t("Configura dónde guardar los resultados", "Configure where to store results"),
+      body: t(`<p>Busca <kbd>Athena</kbd> → <b>Launch query editor</b>. Si aparece un aviso “Before you run your first query, you need to set up a query result location”, ve a la pestaña <b>Settings</b> → <b>Manage</b> → <b>Location of query result:</b></p>`,
+              `<p>Search <kbd>Athena</kbd> → <b>Launch query editor</b>. If a banner says “Before you run your first query, you need to set up a query result location”, go to the <b>Settings</b> tab → <b>Manage</b> → <b>Location of query result:</b></p>`),
+      code: { name:"", text:`s3://{{BUCKET}}/athena-resultados/` },
+      after: t(`<p><b>Save</b>. Vuelve a la pestaña <b>Editor</b>.</p>`, `<p><b>Save</b>. Go back to the <b>Editor</b> tab.</p>`) },
+    { title: t("Crea la base de datos", "Create the database"),
+      body: t(`<p>En el editor pega y ejecuta (<b>Run</b>). Una base de datos en Athena/Glue es solo un “contenedor lógico” de tablas.</p>`,
+              `<p>Paste into the editor and execute (<b>Run</b>). A database in Athena/Glue is just a “logical container” of tables.</p>`),
+      code: { name:"01_crear_base_de_datos.sql", text:`CREATE DATABASE IF NOT EXISTS {{DB}};` },
+      after: t(`<p>En el panel izquierdo, en <b>Database</b>, selecciona <code>{{DB}}</code>.</p>`, `<p>In the left panel, under <b>Database</b>, select <code>{{DB}}</code>.</p>`) },
+    { title: t("Crea la tabla externa de transacciones", "Create the external transactions table"),
+      body: t(`<p>Fíjate en la última línea: <code>LOCATION</code> apunta al <b>prefijo</b>, no a un archivo. Athena leerá los dos CSV de <code>entrada/</code> como una sola tabla de 45 filas. <code>skip.header.line.count</code> evita que la fila de títulos se lea como dato.</p>`,
+              `<p>Look at the last lines: <code>LOCATION</code> points to the <b>prefix</b>, not to a file. Athena will read both CSVs in <code>entrada/</code> as one 45-row table. <code>skip.header.line.count</code> prevents the header row from being read as data.</p>`),
+      code: { name:"02_crear_tabla_transacciones.sql", text:`CREATE EXTERNAL TABLE IF NOT EXISTS {{DB}}.transacciones (
+  id_transaccion string,
+  cliente_id     string,
+  nombre_cliente string,
+  fecha          string,
+  tipo           string,
+  monto          bigint,
+  moneda         string,
+  ciudad         string,
+  canal          string,
+  estado         string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+WITH SERDEPROPERTIES ('separatorChar' = ',', 'quoteChar' = '"', 'escapeChar' = '\\\\')
+STORED AS TEXTFILE
+LOCATION 's3://{{BUCKET}}/entrada/'
+TBLPROPERTIES ('skip.header.line.count' = '1');` } },
+    { title: t("Haz tu primera consulta", "Run your first query"),
+      body: t(`<p>Ejecuta y mira los resultados abajo. Observa también las estadísticas: <b>Run time</b> y <b>Data scanned</b> (¡unos pocos KB!).</p>`,
+              `<p>Run it and look at the results below. Also notice the statistics: <b>Run time</b> and <b>Data scanned</b> (a few KB!).</p>`),
+      code: { name:"", text:`SELECT * FROM {{DB}}.transacciones LIMIT 10;` } },
+    { title: t("Crea la tabla de clientes", "Create the customers table"),
+      body: t(`<p>Misma idea, otro prefijo:</p>`, `<p>Same idea, different prefix:</p>`),
+      code: { name:"03_crear_tabla_clientes.sql", text:`CREATE EXTERNAL TABLE IF NOT EXISTS {{DB}}.clientes (
+  cliente_id        string,
+  nombre            string,
+  ciudad            string,
+  segmento          string,
+  fecha_vinculacion string,
+  correo            string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+WITH SERDEPROPERTIES ('separatorChar' = ',', 'quoteChar' = '"', 'escapeChar' = '\\\\')
+STORED AS TEXTFILE
+LOCATION 's3://{{BUCKET}}/referencia/clientes/'
+TBLPROPERTIES ('skip.header.line.count' = '1');` } },
+    { title: t("Analiza el negocio con SQL", "Analyze the business with SQL"),
+      body: t(`<p>Ejecuta las consultas una por una (selecciona el texto de una consulta y presiona <b>Run</b>, o usa pestañas nuevas con <b>+</b>). Trata de <b>predecir</b> el resultado antes de correr cada una.</p>`,
+              `<p>Run the queries one by one (select one query's text and press <b>Run</b>, or open new tabs with <b>+</b>). Try to <b>predict</b> the result before running each one.</p>`),
+      code: { name:"04_consultas.sql", text:`-- 1) Total aprobado por tipo de transacción
+SELECT tipo, COUNT(*) AS cantidad, SUM(monto) AS total_cop
+FROM {{DB}}.transacciones
+WHERE estado = 'APROBADA'
+GROUP BY tipo
+ORDER BY total_cop DESC;
+
+-- 2) Top 5 clientes por monto aprobado
+SELECT cliente_id, nombre_cliente, SUM(monto) AS total_cop
+FROM {{DB}}.transacciones
+WHERE estado = 'APROBADA'
+GROUP BY cliente_id, nombre_cliente
+ORDER BY total_cop DESC
+LIMIT 5;
+
+-- 3) JOIN con clientes: gasto por segmento
+SELECT c.segmento, COUNT(t.id_transaccion) AS transacciones, SUM(t.monto) AS total_cop
+FROM {{DB}}.transacciones t
+JOIN {{DB}}.clientes c ON t.cliente_id = c.cliente_id
+WHERE t.estado = 'APROBADA'
+GROUP BY c.segmento
+ORDER BY total_cop DESC;
+
+-- 4) Transacciones que requieren revisión operativa
+SELECT fecha, id_transaccion, nombre_cliente, tipo, monto, estado
+FROM {{DB}}.transacciones
+WHERE estado <> 'APROBADA'
+ORDER BY fecha;` },
+      after: t(`<div class="callout"><b>Reflexión:</b> los mismos datos viven en dos lugares con dos propósitos. <b>DynamoDB</b> responde en milisegundos “las transacciones del cliente X” (operacional, por ítem). <b>Athena</b> responde “¿cuánto vendimos por segmento?” (analítico, sobre todo el histórico). Elegir la herramienta según el patrón de acceso es el corazón de la arquitectura en la nube.</div>`,
+               `<div class="callout"><b>Reflection:</b> the same data lives in two places for two purposes. <b>DynamoDB</b> answers “customer X's transactions” in milliseconds (operational, per item). <b>Athena</b> answers “how much did we sell per segment?” (analytical, over the whole history). Picking the tool by access pattern is the heart of cloud architecture.</div>`) },
+    { title: t("Mira los resultados en S3", "Look at the results in S3"),
+      body: t(`<p>Ve a S3 → <code>{{BUCKET}}</code> → <code>athena-resultados/</code>. Cada consulta dejó un <code>.csv</code> (y un <code>.metadata</code>). Athena es 100 % serverless: no hay clúster que apagar; solo pagaste por los bytes escaneados.</p>`,
+              `<p>Go to S3 → <code>{{BUCKET}}</code> → <code>athena-resultados/</code>. Every query left a <code>.csv</code> (and a <code>.metadata</code>). Athena is 100% serverless: there is no cluster to shut down; you only paid for scanned bytes.</p>`) },
+  ],
+  checkpoint: [
+    t("<code>SELECT COUNT(*) FROM {{DB}}.transacciones</code> devuelve 45.", "<code>SELECT COUNT(*) FROM {{DB}}.transacciones</code> returns 45."),
+    t("El JOIN por segmento devuelve 3 filas (PREMIUM, ESTANDAR, JOVEN).", "The JOIN by segment returns 3 rows (PREMIUM, ESTANDAR, JOVEN)."),
+    t("Veo archivos de resultados en <code>athena-resultados/</code>.", "I can see result files in <code>athena-resultados/</code>."),
+  ],
+  trouble: [
+    { q: t("“No output location provided”.", "“No output location provided”."), a: t("Paso 1: configura la ubicación de resultados en Settings.", "Step 1: configure the result location in Settings.") },
+    { q: t("La tabla existe pero <code>SELECT</code> devuelve 0 filas.", "The table exists but <code>SELECT</code> returns 0 rows."), a: t("Revisa que <code>LOCATION</code> termine en <code>/</code> y apunte al prefijo correcto del bucket correcto; y que los CSV estén realmente ahí.", "Check that <code>LOCATION</code> ends with <code>/</code> and points to the right prefix of the right bucket; and that the CSVs are really there.") },
+    { q: t("Aparecen caracteres raros en los nombres (Ã©).", "Odd characters show up in names (Ã©)."), a: t("El archivo se guardó con otra codificación. Los CSV de esta guía son UTF-8; descárgalos de nuevo desde aquí sin abrirlos/guardarlos en Excel.", "The file was saved with another encoding. This guide's CSVs are UTF-8; download them again from here without opening/saving them in Excel.") },
+    { q: t("Error de sintaxis con <code>{{DB}}</code>.", "Syntax error with <code>{{DB}}</code>."), a: t("Los nombres de bases de datos y tablas solo admiten letras, números y guion bajo. Nada de guiones.", "Database and table names only allow letters, numbers and underscores. No hyphens.") },
+  ]
+},
+/* ------------------------------------------------------------------ 7. CIERRE */
+{
+  id:"cierre", icon:"end", color:"#1d8102", mins:10,
+  title: t("Cierre, limpieza y próximos pasos", "Wrap-up, cleanup and next steps"),
+  subtitle: t("Repasar lo construido, borrar recursos y seguir aprendiendo", "Review what we built, delete resources and keep learning"),
+  goals: [
+    t("<b>Explicar</b> el flujo completo con tus propias palabras.", "<b>Explain</b> the full flow in your own words."),
+    t("<b>Borrar</b> los recursos en el orden correcto para no dejar costos.", "<b>Delete</b> the resources in the right order so no costs remain."),
+    t("<b>Saber</b> qué estudiar después.", "<b>Know</b> what to study next."),
+  ],
+  concept: t(
+    `<b>Lo que construiste hoy</b> es, de verdad, una arquitectura de producción en miniatura: <b>S3</b> (ingesta y data lake) → <b>EventBridge</b> (eventos) → <b>Lambda</b> (cómputo) → <b>DynamoDB</b> (operacional) + <b>SES</b> (notificación), con <b>Athena</b> (analítica) leyendo el mismo S3. Todo serverless: sin servidores que parchar, escalado automático y pago por uso. El siguiente nivel es escribir esto mismo como <b>Infraestructura como Código</b>: la guía que estás leyendo, por ejemplo, se despliega con una plantilla de CloudFormation (S3 privado + CloudFront). Pídesela a tu instructor.`,
+    `<b>What you built today</b> is truly a miniature production architecture: <b>S3</b> (ingestion and data lake) → <b>EventBridge</b> (events) → <b>Lambda</b> (compute) → <b>DynamoDB</b> (operational) + <b>SES</b> (notification), with <b>Athena</b> (analytics) reading the same S3. All serverless: no servers to patch, automatic scaling and pay per use. The next level is writing this same thing as <b>Infrastructure as Code</b>: the guide you are reading, for instance, is deployed with a CloudFormation template (private S3 + CloudFront). Ask your instructor for it.`),
+  steps: [
+    { title: t("Cuenta la historia completa (2 minutos, en parejas)", "Tell the whole story (2 minutes, in pairs)"),
+      body: t(`<p>Explícale a tu compañero qué pasa desde que alguien sube <code>transacciones_2026_10.csv</code> hasta que llega el correo. Usa las palabras: <i>objeto, prefijo, evento, regla, rol, PK/SK, tabla externa</i>. Si puedes contarlo, lo entendiste.</p>`,
+              `<p>Explain to your classmate what happens from the moment someone uploads <code>transacciones_2026_10.csv</code> until the email arrives. Use the words: <i>object, prefix, event, rule, role, PK/SK, external table</i>. If you can tell it, you understood it.</p>`) },
+    { title: t("Limpieza 1: EventBridge y Lambda", "Cleanup 1: EventBridge and Lambda"),
+      body: t(`<ul><li>EventBridge → Rules → <code>{{RULE}}</code> → <b>Delete</b>.</li><li>Lambda → <code>{{FN}}</code> → <b>Actions → Delete</b>.</li><li>IAM → Roles → busca <code>{{FN}}-role-…</code> → <b>Delete</b>.</li><li>CloudWatch → Log groups → <code>/aws/lambda/{{FN}}</code> → <b>Delete</b> (opcional, los logs casi no cuestan).</li></ul>`,
+              `<ul><li>EventBridge → Rules → <code>{{RULE}}</code> → <b>Delete</b>.</li><li>Lambda → <code>{{FN}}</code> → <b>Actions → Delete</b>.</li><li>IAM → Roles → search <code>{{FN}}-role-…</code> → <b>Delete</b>.</li><li>CloudWatch → Log groups → <code>/aws/lambda/{{FN}}</code> → <b>Delete</b> (optional, logs cost almost nothing).</li></ul>`) },
+    { title: t("Limpieza 2: DynamoDB y Athena", "Cleanup 2: DynamoDB and Athena"),
+      body: t(`<ul><li>DynamoDB → Tables → <code>{{TABLE}}</code> → <b>Delete</b> (desmarca “Create an on-demand backup”).</li><li>Athena → ejecuta:</li></ul>`,
+              `<ul><li>DynamoDB → Tables → <code>{{TABLE}}</code> → <b>Delete</b> (untick “Create an on-demand backup”).</li><li>Athena → run:</li></ul>`),
+      code: { name:"", text:`DROP TABLE IF EXISTS {{DB}}.transacciones;
+DROP TABLE IF EXISTS {{DB}}.clientes;
+DROP DATABASE IF EXISTS {{DB}};` } },
+    { title: t("Limpieza 3: S3 (vaciar y borrar)", "Cleanup 3: S3 (empty and delete)"),
+      body: t(`<p>S3 → selecciona <code>{{BUCKET}}</code> → <b>Empty</b> → escribe <i>permanently delete</i> → <b>Empty</b>. Como el bucket tiene versionado, “Empty” borra también las versiones. Luego selecciona el bucket → <b>Delete</b> → escribe el nombre → <b>Delete bucket</b>.</p>`,
+              `<p>S3 → select <code>{{BUCKET}}</code> → <b>Empty</b> → type <i>permanently delete</i> → <b>Empty</b>. Since the bucket is versioned, “Empty” also removes versions. Then select the bucket → <b>Delete</b> → type the name → <b>Delete bucket</b>.</p>`) },
+    { title: t("Limpieza 4 (opcional): identidad SES", "Cleanup 4 (optional): SES identity"),
+      body: t(`<p>SES → Identities → <code>{{EMAIL}}</code> → <b>Delete</b>. Si vas a seguir practicando, puedes dejarla; no tiene costo.</p>`,
+              `<p>SES → Identities → <code>{{EMAIL}}</code> → <b>Delete</b>. If you plan to keep practicing you can leave it; it has no cost.</p>`) },
+    { title: t("Próximos pasos recomendados", "Recommended next steps"),
+      body: t(`<ul><li><b>AWS Skill Builder</b> (gratis): “AWS Cloud Practitioner Essentials” y “Serverless Learning Plan”.</li><li><b>Repite el taller como código</b>: intenta describir tu bucket, tabla y Lambda en una plantilla de CloudFormation o con AWS CDK (Python).</li><li><b>Profundiza:</b> índices GSI en DynamoDB, formatos columnares (Parquet) en Athena, API Gateway + Lambda para exponer una API, Step Functions para orquestar.</li><li><b>Seguridad primero:</b> mínimo privilegio en IAM, S3 siempre privado, cifrado por defecto, MFA en tu usuario.</li></ul>`,
+              `<ul><li><b>AWS Skill Builder</b> (free): “AWS Cloud Practitioner Essentials” and “Serverless Learning Plan”.</li><li><b>Redo the workshop as code</b>: try describing your bucket, table and Lambda in a CloudFormation template or with AWS CDK (Python).</li><li><b>Go deeper:</b> GSI indexes in DynamoDB, columnar formats (Parquet) in Athena, API Gateway + Lambda to expose an API, Step Functions for orchestration.</li><li><b>Security first:</b> least privilege in IAM, S3 always private, encryption by default, MFA on your user.</li></ul>`) },
+  ],
+  checkpoint: [
+    t("No queda ninguno de mis recursos del taller en la cuenta.", "None of my workshop resources remain in the account."),
+    t("Puedo dibujar el diagrama de la solución de memoria.", "I can draw the solution diagram from memory."),
+  ],
+  trouble: [
+    { q: t("No me deja borrar el bucket.", "It will not let me delete the bucket."), a: t("Primero <b>Empty</b> (incluye versiones). Si Athena sigue escribiendo resultados, espera un minuto y vuelve a vaciar.", "First <b>Empty</b> (includes versions). If Athena is still writing results, wait a minute and empty again.") },
+  ]
+}
+];
+
+/* Extras: glossary + quiz */
+const GLOSSARY = [
+  ["Región / Region", t("Ubicación geográfica con varios centros de datos (Zonas de Disponibilidad). Los recursos viven en una región.", "Geographic location with several data centers (Availability Zones). Resources live in one region.")],
+  ["Bucket / Objeto / Clave", t("Contenedor S3 / archivo + metadatos / nombre único del objeto dentro del bucket (ej. <code>entrada/a.csv</code>).", "S3 container / file + metadata / unique object name within the bucket (e.g. <code>entrada/a.csv</code>).")],
+  ["Prefijo / Prefix", t("Inicio de una clave; la consola lo muestra como carpeta. Sirve para filtrar (Athena, EventBridge).", "Beginning of a key; the console shows it as a folder. Used for filtering (Athena, EventBridge).")],
+  ["PK / SK", t("Clave de partición (dónde vive el ítem) y clave de ordenamiento (orden dentro de la partición). Juntas identifican un ítem en DynamoDB.", "Partition key (where the item lives) and sort key (order within the partition). Together they identify a DynamoDB item.")],
+  ["Query vs Scan", t("Query lee solo una partición (rápido y barato). Scan lee toda la tabla.", "Query reads a single partition (fast and cheap). Scan reads the whole table.")],
+  ["Rol de ejecución / Execution role", t("Identidad IAM que la Lambda “usa” para llamar otros servicios. Sin permisos en el rol, la Lambda recibe AccessDenied.", "IAM identity the Lambda “wears” to call other services. Without permissions on the role, the Lambda gets AccessDenied.")],
+  ["Evento / Regla / Destino", t("EventBridge: JSON que describe algo que pasó / filtro que lo captura / servicio que lo recibe.", "EventBridge: JSON describing something that happened / filter that catches it / service that receives it.")],
+  ["Sandbox SES", t("Estado inicial de SES: solo correos verificados, 200/día.", "Initial SES state: only verified addresses, 200/day.")],
+  ["Tabla externa / Schema-on-read", t("Definición de columnas sobre archivos que siguen en S3; Athena aplica la estructura al leer.", "Column definition over files that stay in S3; Athena applies the structure when reading.")],
+  ["Serverless", t("No administras servidores; el servicio escala y cobra por uso (Lambda, DynamoDB on-demand, Athena, S3, EventBridge, SES).", "You manage no servers; the service scales and bills per use (Lambda, DynamoDB on-demand, Athena, S3, EventBridge, SES).")],
+];
+const QUIZ = [
+  { q: t("¿Por qué la “Object URL” del CSV devolvió AccessDenied?", "Why did the CSV “Object URL” return AccessDenied?"),
+    opts:[ t("Porque el bucket es privado por defecto y solo identidades autorizadas pueden leerlo.", "Because the bucket is private by default and only authorized identities can read it."), t("Porque el archivo estaba corrupto.", "Because the file was corrupted."), t("Porque S3 no soporta CSV.", "Because S3 does not support CSV.") ], ok:0,
+    why: t("Bloqueo de acceso público activo = comportamiento correcto y seguro.", "Block Public Access on = correct and secure behavior.") },
+  { q: t("En DynamoDB, ¿qué logramos con SK = fecha#id_transaccion?", "In DynamoDB, what do we achieve with SK = fecha#id_transaccion?"),
+    opts:[ t("Ordenar las transacciones de un cliente por fecha y garantizar unicidad.", "Order a customer's transactions by date and guarantee uniqueness."), t("Que la tabla sea relacional.", "Make the table relational."), t("Cifrar los datos.", "Encrypt the data.") ], ok:0,
+    why: t("La SK ordena dentro de la partición; el sufijo evita colisiones el mismo día.", "The SK orders within the partition; the suffix avoids same-day collisions.") },
+  { q: t("La Lambda falla con “not authorized to perform dynamodb:BatchWriteItem”. ¿Qué arreglas?", "The Lambda fails with “not authorized to perform dynamodb:BatchWriteItem”. What do you fix?"),
+    opts:[ t("El rol de ejecución de la Lambda (permisos IAM).", "The Lambda execution role (IAM permissions)."), t("El código Python.", "The Python code."), t("La región de DynamoDB.", "The DynamoDB region.") ], ok:0,
+    why: t("El código no tiene credenciales; el rol le presta permisos.", "The code holds no credentials; the role lends permissions.") },
+  { q: t("¿Qué filtra el patrón de la regla de EventBridge?", "What does the EventBridge rule pattern filter?"),
+    opts:[ t("Eventos “Object Created” de S3, de mi bucket, con clave que empieza por entrada/.", "S3 “Object Created” events, from my bucket, with a key starting with entrada/."), t("Todos los eventos de la cuenta.", "Every event in the account."), t("Solo eventos de Lambda.", "Only Lambda events.") ], ok:0,
+    why: t("source + detail-type + bucket + prefix.", "source + detail-type + bucket + prefix.") },
+  { q: t("¿Por qué Athena pudo leer dos archivos como una sola tabla?", "Why could Athena read two files as a single table?"),
+    opts:[ t("Porque LOCATION apunta al prefijo entrada/ y todo lo que hay dentro comparte esquema.", "Because LOCATION points to the entrada/ prefix and everything inside shares the schema."), t("Porque Athena copió los datos a una base de datos.", "Because Athena copied the data into a database."), t("Porque los archivos estaban comprimidos.", "Because the files were compressed.") ], ok:0,
+    why: t("Schema-on-read sobre un prefijo de S3.", "Schema-on-read over an S3 prefix.") },
+];
+</script>
+
+<script>
+/* =====================================================================
+   RENDER ENGINE
+   ===================================================================== */
+(function(){
+  const $ = (s, el=document) => el.querySelector(s);
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const store = { get(k,d){ try{ const v=localStorage.getItem("aws101:"+k); return v===null?d:JSON.parse(v);}catch(e){return d;} }, set(k,v){ try{ localStorage.setItem("aws101:"+k, JSON.stringify(v)); }catch(e){} }, clear(){ try{ Object.keys(localStorage).filter(k=>k.startsWith("aws101:")).forEach(k=>localStorage.removeItem(k)); }catch(e){} } };
+
+  // ---- deploy-time config (placeholders are replaced by the CloudFormation custom resource)
+  let CFG = {};
+  try { CFG = JSON.parse($("#workshop-config").textContent); } catch(e) {}
+  const real = v => (v && !/^__.*__$/.test(v)) ? v : "";
+  const cfg = {
+    name: real(CFG.workshopName) || "AWS Basics Workshop 101",
+    participants: real(CFG.participantEmails).split(",").map(s=>s.trim()).filter(Boolean),
+    instructor: real(CFG.instructorEmail),
+    region: real(CFG.awsRegion) || "us-east-1",
+    account: real(CFG.awsAccountId),
+    deployedAt: real(CFG.deployedAt),
+  };
+  $("#brandName").textContent = cfg.name;
+  document.title = cfg.name;
+
+  // ---- state
+  let lang = store.get("lang", (navigator.language||"es").toLowerCase().startsWith("en") ? "en" : "es");
+  let setup = store.get("setup", { ini:"", email:"", region: cfg.region, bucket:"" });
+  let done = store.get("done", {});
+  const totalSteps = MODULES.reduce((n,m)=>n+m.steps.length,0);
+  const T = () => UI[lang];
+  const tx = obj => (obj && typeof obj === "object") ? (obj[lang] ?? obj.es) : obj;
+
+  // ---- placeholder substitution
+  function values(){
+    const ini = (setup.ini||"").trim().toLowerCase();
+    const ph = `<${T().placeholder}>`, phU = `<${T().placeholder.replace(/-/g,"_")}>`;
+    const I = ini || ph, IU = ini ? ini.replace(/[^a-z0-9]/g,"_") : phU;
+    return {
+      "{{INI}}": I, "{{INI_}}": IU,
+      "{{BUCKET}}": (setup.bucket||"").trim() || `workshop-aws-101-${I}`,
+      "{{TABLE}}": `transacciones-${I}`, "{{FN}}": `procesar-transacciones-${I}`, "{{RULE}}": `csv-nuevo-${I}`,
+      "{{DB}}": `workshop_aws_101_${IU}`,
+      "{{EMAIL}}": (setup.email||"").trim() || T().placeholderEmail,
+      "{{REGION}}": (setup.region||cfg.region),
+    };
+  }
+  function fill(html, forCode){
+    const v = values(); const missing = !(setup.ini||"").trim();
+    return html.replace(/\{\{(INI_?|BUCKET|TABLE|FN|RULE|DB|EMAIL|REGION)\}\}/g, m => {
+      const val = v[m]; const isPh = val.startsWith("<") || (m==="{{EMAIL}}" && !(setup.email||"").trim());
+      return (forCode && isPh) ? `<span class="ph">${esc(val)}</span>` : (forCode ? esc(val) : (isPh ? `<span class="ph">${esc(val)}</span>` : esc(val)));
+    });
+  }
+  const codeBlock = (c) => `<div class="codewrap ${c.name?"has-name":""}">${c.name?`<span class="filename">${esc(c.name)}</span>`:""}<button class="copy" data-copy>${T().copy}</button><pre><code>${fill(esc(c.text), true)}</code></pre></div>`;
+
+  // ---- hero, setup, agenda, arch, files
+  function renderHero(){
+    const total = MODULES.reduce((n,m)=>n+m.mins,0);
+    $("#hero").innerHTML = `
+      <span class="pill">S3</span><span class="pill">DynamoDB</span><span class="pill">SES</span><span class="pill">Lambda · Python</span><span class="pill">EventBridge</span><span class="pill">Athena</span>
+      <h1>${esc(cfg.name)}</h1>
+      <p>${lang==="es" ? "Un taller práctico y guiado de <b>2 horas</b> para dar tus primeros pasos en AWS construyendo, con tus propias manos, una pequeña automatización de datos de principio a fin." : "A hands-on, guided <b>2-hour</b> workshop to take your first steps in AWS by building, with your own hands, a small end-to-end data automation."}</p>
+      <div class="meta"><span>⏱️ <b>${T().total}:</b> ${total} ${T().minutes}</span><span>📚 <b>${MODULES.length}</b> ${T().modules}</span><span>🎯 <b>${T().level}:</b> ${T().levelVal}</span><span>🖱️ <b>${T().mode}:</b> ${T().modeVal}</span>${cfg.instructor?`<span>👤 <b>${T().instructor}:</b> ${esc(cfg.instructor)}</span>`:""}${cfg.deployedAt?`<span>🚀 <b>${T().deployed}:</b> ${esc(cfg.deployedAt)}</span>`:""}</div>`;
+    $("#badgeRegion").textContent = `${lang==="es"?"Región":"Region"}: ${values()["{{REGION}}"]}`;
+  }
+  function renderSetup(){
+    $("#setupCard").innerHTML = `<h3>🧰 ${T().yourSetup}</h3><p style="color:var(--muted);font-size:.93rem">${T().setupHint}</p>
+      <div class="form">
+        <div><label>${T().initials}</label><input id="inIni" value="${esc(setup.ini||"")}" placeholder="sga" maxlength="12" autocomplete="off"><small style="color:var(--muted)">${T().initialsHint}</small></div>
+        <div><label>${T().email}</label><input id="inEmail" type="email" value="${esc(setup.email||"")}" placeholder="${T().placeholderEmail}" autocomplete="off"></div>
+        <div><label>${T().region}</label><input id="inRegion" value="${esc(setup.region||cfg.region)}" placeholder="us-east-1" autocomplete="off"></div>
+        <div><label>${lang==="es"?"Nombre del bucket (solo si tuviste que cambiarlo)":"Bucket name (only if you had to change it)"}</label><input id="inBucket" value="${esc(setup.bucket||"")}" placeholder="workshop-aws-101-${esc(setup.ini||T().placeholder)}" autocomplete="off"></div>
+      </div>
+      <h4 style="margin-top:18px">📁 ${T().files}</h4>
+      <div class="dl">${Object.keys(CSV_FILES).map(f=>`<button class="btn primary" data-dl="${f}">⬇︎ ${f}</button>`).join("")}</div>`;
+    ["inIni","inEmail","inRegion","inBucket"].forEach(id => $("#"+id).addEventListener("input", e => {
+      const key = {inIni:"ini",inEmail:"email",inRegion:"region",inBucket:"bucket"}[id];
+      setup[key] = e.target.value; if(key==="ini") setup.ini = setup.ini.toLowerCase().replace(/[^a-z0-9-]/g,"");
+      store.set("setup", setup); renderAll(false);
+    }));
+  }
+  function renderAgenda(){
+    let acc = 0;
+    $("#agendaCard").innerHTML = `<h3>🗓️ ${T().agenda}</h3><div class="timeline">${MODULES.map((m,i)=>{const start=acc; acc+=m.mins; return `<div style="border-top:3px solid ${m.color}"><b>${String(Math.floor(start/60)).padStart(2,"0")}:${String(start%60).padStart(2,"0")}</b>${i}. ${esc(tx(m.title).split(":")[0])}<br><span style="color:var(--muted)">${m.mins} ${T().minutes}</span></div>`;}).join("")}</div>`;
+  }
+  function renderArch(){
+    const L = lang==="es";
+    $("#archCard").innerHTML = `<h3>🏗️ ${T().arch}</h3><p>${T().archText}</p>
+<svg class="arch" viewBox="0 0 900 330" role="img" aria-label="architecture">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <style>.bx{fill:var(--surface-2);stroke:var(--border);stroke-width:1.5;rx:12}.lb{font:600 14px sans-serif;fill:var(--text)}.sm{font:12px sans-serif;fill:var(--muted)}.ln{stroke:var(--muted);stroke-width:2;fill:none;marker-end:url(#ar)}.tag{font:700 11px sans-serif;fill:#fff}</style>
+  <!-- user -->
+  <circle cx="60" cy="120" r="18" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/><path d="M35 165c0-14 11-25 25-25s25 11 25 25" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+  <text x="60" y="190" text-anchor="middle" class="sm">${L?"Tú (consola)":"You (console)"}</text>
+  <path class="ln" d="M95 120H150"/><text x="122" y="110" text-anchor="middle" class="sm">CSV</text>
+  <!-- S3 -->
+  <rect class="bx" x="150" y="80" width="150" height="80"/><rect x="150" y="80" width="150" height="20" rx="12" fill="var(--s3)"/><text x="225" y="94" text-anchor="middle" class="tag">Amazon S3</text>
+  <text x="225" y="125" text-anchor="middle" class="lb">${L?"Bucket privado":"Private bucket"}</text><text x="225" y="145" text-anchor="middle" class="sm">entrada/ · referencia/</text>
+  <!-- EventBridge -->
+  <path class="ln" d="M300 120H360"/><text x="330" y="110" text-anchor="middle" class="sm">${L?"evento":"event"}</text>
+  <rect class="bx" x="360" y="80" width="150" height="80"/><rect x="360" y="80" width="150" height="20" rx="12" fill="var(--evb)"/><text x="435" y="94" text-anchor="middle" class="tag">EventBridge</text>
+  <text x="435" y="125" text-anchor="middle" class="lb">${L?"Regla":"Rule"}</text><text x="435" y="145" text-anchor="middle" class="sm">Object Created · entrada/</text>
+  <!-- Lambda -->
+  <path class="ln" d="M510 120H570"/>
+  <rect class="bx" x="570" y="80" width="150" height="80"/><rect x="570" y="80" width="150" height="20" rx="12" fill="var(--lambda)"/><text x="645" y="94" text-anchor="middle" class="tag">AWS Lambda</text>
+  <text x="645" y="125" text-anchor="middle" class="lb">Python 3.13</text><text x="645" y="145" text-anchor="middle" class="sm">${L?"lee · guarda · notifica":"read · store · notify"}</text>
+  <!-- DynamoDB -->
+  <path class="ln" d="M720 105 C 760 105, 760 45, 790 45"/>
+  <rect class="bx" x="790" y="10" width="105" height="70"/><rect x="790" y="10" width="105" height="20" rx="12" fill="var(--ddb)"/><text x="842" y="24" text-anchor="middle" class="tag">DynamoDB</text>
+  <text x="842" y="52" text-anchor="middle" class="lb" style="font-size:12px">PK cliente_id</text><text x="842" y="68" text-anchor="middle" class="sm">SK fecha_id</text>
+  <!-- SES -->
+  <path class="ln" d="M720 135 C 760 135, 760 195, 790 195"/>
+  <rect class="bx" x="790" y="160" width="105" height="70"/><rect x="790" y="160" width="105" height="20" rx="12" fill="var(--ses)"/><text x="842" y="174" text-anchor="middle" class="tag">Amazon SES</text>
+  <text x="842" y="202" text-anchor="middle" class="lb" style="font-size:12px">${L?"Correo":"Email"}</text><text x="842" y="218" text-anchor="middle" class="sm">${L?"resumen":"summary"}</text>
+  <!-- Athena -->
+  <path class="ln" d="M225 160V240"/><text x="260" y="205" class="sm">SQL</text>
+  <rect class="bx" x="150" y="240" width="150" height="75"/><rect x="150" y="240" width="150" height="20" rx="12" fill="var(--athena)"/><text x="225" y="254" text-anchor="middle" class="tag">Amazon Athena</text>
+  <text x="225" y="282" text-anchor="middle" class="lb">${L?"Tablas externas":"External tables"}</text><text x="225" y="302" text-anchor="middle" class="sm">${L?"paga por bytes escaneados":"pay per scanned bytes"}</text>
+  <path class="ln" d="M300 278H360"/><rect class="bx" x="360" y="255" width="150" height="45"/><text x="435" y="283" text-anchor="middle" class="sm">${L?"Resultados → athena-resultados/":"Results → athena-resultados/"}</text>
+</svg>
+<div class="chips" style="margin-top:8px">${[["s3","S3"],["evb","EventBridge"],["lambda","Lambda"],["ddb","DynamoDB"],["ses","SES"],["athena","Athena"]].map(([k,n])=>`<span class="chip svc"><i style="background:var(--${k})"></i>${n}</span>`).join("")}</div>`;
+  }
+
+  // ---- modules
+  function renderModules(){
+    $("#modules").innerHTML = MODULES.map((m,i)=>{
+      const steps = m.steps.map((s,j)=>{
+        const id = `${m.id}-${j}`;
+        return `<div class="step ${done[id]?"done":""}" data-step="${id}">
+          <div class="num" title="✓">${done[id]?"✓":j+1}</div>
+          <div><div class="step-title">${fill(tx(s.title))}</div><div class="step-body">${fill(tx(s.body))}${s.code?codeBlock(s.code):""}${s.after?fill(tx(s.after)):""}</div></div></div>`;
+      }).join("");
+      const prev = i>0 ? `<a class="btn" href="#m-${MODULES[i-1].id}">${T().prev}</a>` : "<span></span>";
+      const next = i<MODULES.length-1 ? `<a class="btn primary" href="#m-${MODULES[i+1].id}">${T().next}</a>` : "<span></span>";
+      return `<section class="module" id="m-${m.id}">
+        <div class="module-head"><div class="icon" style="background:${m.color}">${ICONS[m.icon]}</div><div><small>${T().nameLabel} ${i} · ${m.mins} ${T().minutes}</small><h2 style="margin:0">${esc(tx(m.title))}</h2><small>${esc(tx(m.subtitle))}</small></div></div>
+        <div class="card">
+          <h4>🎯 ${T().goalsTitle}</h4><div class="goals">${m.goals.map(g=>`<div class="goal">${tx(g)}</div>`).join("")}</div>
+          <div class="callout concept"><b>${T().concept}</b><br>${fill(tx(m.concept))}</div>
+          <h3 style="margin-top:22px">🖱️ ${T().stepsTitle}</h3>${steps}
+          <div style="margin-top:14px"><button class="btn" data-markall="${m.id}">✓ ${T().markAll}</button></div>
+          <div class="callout tip" style="margin-top:18px"><b>${T().checkpoint}</b><div class="check">${m.checkpoint.map((c,k)=>`<label><input type="checkbox" data-check="${m.id}-c${k}" ${done[m.id+"-c"+k]?"checked":""}><span>${fill(tx(c))}</span></label>`).join("")}</div></div>
+          <details><summary>${T().trouble}</summary>${m.trouble.map(tr=>`<p><b>${fill(tx(tr.q))}</b><br>${fill(tx(tr.a))}</p>`).join("")}</details>
+        </div>
+        <div class="module-nav">${prev}${next}</div>
+      </section>`;
+    }).join("");
+    // SES participants list (from deploy-time parameters)
+    const sp = $("#sesParticipants");
+    if (sp && cfg.participants.length){
+      sp.innerHTML = `<div class="callout"><b>${T().participants}:</b><div class="chips" style="margin-top:6px">${cfg.participants.map(e=>`<span class="chip">${esc(e)}</span>`).join("")}</div></div>`;
+    }
+  }
+  function renderExtras(){
+    $("#extras").innerHTML = `
+      <section class="module" id="x-glosario"><h2>📖 ${lang==="es"?"Glosario":"Glossary"}</h2><div class="card"><table>${GLOSSARY.map(([k,v])=>`<tr><th style="width:32%">${k}</th><td>${tx(v)}</td></tr>`).join("")}</table></div></section>
+      <section class="module quiz" id="x-quiz"><h2>${T().quizTitle}</h2><div class="card">${QUIZ.map((q,i)=>`<div class="q"><b>${i+1}. ${tx(q.q)}</b><div class="opts">${q.opts.map((o,k)=>`<button data-quiz="${i}" data-opt="${k}">${tx(o)}</button>`).join("")}</div><div class="sm" id="quiz-fb-${i}" style="margin-top:6px;color:var(--muted)"></div></div>`).join("")}</div></section>`;
+  }
+  function renderNav(){
+    $("#nav").innerHTML = MODULES.map((m,i)=>{
+      const n = m.steps.filter((s,j)=>done[`${m.id}-${j}`]).length, all = n===m.steps.length;
+      return `<a href="#m-${m.id}" data-nav="m-${m.id}"><span class="dot" style="background:${m.color}">${all?"✓":i}</span><span>${esc(tx(m.title).split(":")[0])}</span><span class="mins ${all?"done":""}">${all?"✓":n+"/"+m.steps.length}</span></a>`;
+    }).join("");
+    $("#navExtras").innerHTML = `<a href="#x-glosario"><span class="dot" style="background:var(--muted)">📖</span><span>${lang==="es"?"Glosario":"Glossary"}</span></a><a href="#x-quiz"><span class="dot" style="background:var(--muted)">🧠</span><span>Quiz</span></a>`;
+    const d = Object.keys(done).filter(k=>!k.includes("-c") && done[k]).length;
+    $("#progressBar").style.width = Math.round(100*d/totalSteps)+"%"; $("#progressText").textContent = T().progress(d,totalSteps);
+  }
+  function renderAll(scrollKeep=true){
+    const y = window.scrollY;
+    document.documentElement.setAttribute("data-lang", lang); document.documentElement.lang = lang;
+    $("#langEs").classList.toggle("active", lang==="es"); $("#langEn").classList.toggle("active", lang==="en");
+    const active = document.activeElement && document.activeElement.id;
+    const caret = active ? document.activeElement.selectionStart : null;
+    renderHero(); renderSetup(); renderAgenda(); renderArch(); renderModules(); renderExtras(); renderNav();
+    if (active && $("#"+active)) { const el=$("#"+active); el.focus(); try{ el.setSelectionRange(caret,caret);}catch(e){} }
+    if (scrollKeep) window.scrollTo(0,y);
+  }
+
+  // ---- events (delegated)
+  document.addEventListener("click", e => {
+    const copy = e.target.closest("[data-copy]");
+    if (copy){ const txt = copy.parentElement.querySelector("code").innerText; navigator.clipboard?.writeText(txt).then(()=>toast(T().copied)); return; }
+    const dl = e.target.closest("[data-dl]");
+    if (dl){ const name=dl.dataset.dl; const blob=new Blob(["﻿"+CSV_FILES[name]],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); return; }
+    const num = e.target.closest(".num, .step-title");
+    if (num){ const id = num.closest(".step").dataset.step; done[id] = !done[id]; store.set("done", done); renderAll(); return; }
+    const all = e.target.closest("[data-markall]");
+    if (all){ const m = MODULES.find(x=>x.id===all.dataset.markall); m.steps.forEach((s,j)=>done[`${m.id}-${j}`]=true); m.checkpoint.forEach((c,k)=>done[`${m.id}-c${k}`]=true); store.set("done",done); renderAll(); toast("✓"); return; }
+    const qz = e.target.closest("[data-quiz]");
+    if (qz){ const q=QUIZ[+qz.dataset.quiz]; const ok = +qz.dataset.opt===q.ok; qz.parentElement.querySelectorAll("button").forEach(b=>b.classList.remove("ok","bad")); qz.classList.add(ok?"ok":"bad"); $("#quiz-fb-"+qz.dataset.quiz).textContent = (ok?T().quizOk:T().quizBad)+tx(q.why); return; }
+    if (e.target.closest("#nav a, #navExtras a")) $("#sidebar").classList.remove("open");
+  });
+  document.addEventListener("change", e => { const c = e.target.closest("[data-check]"); if (c){ done[c.dataset.check]=c.checked; store.set("done",done); renderNav(); } });
+  $("#langEs").onclick = () => { lang="es"; store.set("lang",lang); renderAll(); };
+  $("#langEn").onclick = () => { lang="en"; store.set("lang",lang); renderAll(); };
+  $("#themeBtn").onclick = () => { const cur = document.documentElement.getAttribute("data-theme"); const dark = cur ? cur==="dark" : matchMedia("(prefers-color-scheme: dark)").matches; document.documentElement.setAttribute("data-theme", dark?"light":"dark"); store.set("theme", dark?"light":"dark"); };
+  $("#menuBtn").onclick = () => $("#sidebar").classList.toggle("open");
+  $("#resetBtn").onclick = () => { if (confirm(T().resetConfirm)){ store.clear(); done={}; setup={ini:"",email:"",region:cfg.region,bucket:""}; renderAll(); } };
+  const savedTheme = store.get("theme", null); if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
+  let toastTimer; function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),1400); }
+
+  // active section highlight
+  const io = new IntersectionObserver(entries => { entries.forEach(en => { if (en.isIntersecting){ document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active", a.dataset.nav===en.target.id)); } }); }, { rootMargin:"-30% 0px -60% 0px" });
+  renderAll(false);
+  document.querySelectorAll(".module[id^='m-']").forEach(s=>io.observe(s));
+  if (location.hash && $(location.hash)) $(location.hash).scrollIntoView();
+})();
+</script>
+</body>
+</html>
