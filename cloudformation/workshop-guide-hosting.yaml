@@ -237,8 +237,13 @@ Resources:
       Role: !GetAtt DeployerRole.Arn
       Code:
         ZipFile: |
-          import base64,boto3,cfnresponse,datetime,json,urllib.request
+          import base64,boto3,datetime,json,urllib.request
           s3=boto3.client("s3");cf=boto3.client("cloudfront");ses=boto3.client("ses")
+          def respond(event,context,ok,data,pid):
+              # Python 3.13 runtimes no longer bundle cfnresponse; answer CloudFormation directly.
+              body=json.dumps({"Status":"SUCCESS" if ok else "FAILED","Reason":str(data.get("Error","See CloudWatch log stream: "+context.log_stream_name))[:250],"PhysicalResourceId":pid,"StackId":event["StackId"],"RequestId":event["RequestId"],"LogicalResourceId":event["LogicalResourceId"],"NoEcho":False,"Data":data}).encode()
+              req=urllib.request.Request(event["ResponseURL"],data=body,method="PUT",headers={"Content-Type":"","Content-Length":str(len(body))})
+              with urllib.request.urlopen(req,timeout=30) as r:print("cfn response",r.status)
           PLACEHOLDER="<!doctype html><meta charset=utf-8><title>Workshop guide</title><body style='font-family:sans-serif;padding:40px'><h1>AWS Basics Workshop 101</h1><p>Guide not uploaded yet. Upload <code>guide/index.html</code> to the bucket and invalidate CloudFront (see stack Outputs).</p>"
           def empty(bucket):
               p=s3.get_paginator("list_object_versions")
@@ -272,9 +277,9 @@ Resources:
                               for e in emails:
                                   if known.get(e,{}).get("VerificationStatus")!="Success":ses.verify_email_identity(EmailAddress=e)
                           data["Emails"]=",".join(emails);data["Bytes"]=str(len(html))
-                  cfnresponse.send(event,context,cfnresponse.SUCCESS,data,p.get("Action","GuideDeployer")+"-"+p.get("Bucket","auth"))
+                  respond(event,context,True,data,p.get("Action","Deploy")+"-"+p.get("Bucket","auth"))
               except Exception as x:
-                  print("ERROR",repr(x));cfnresponse.send(event,context,cfnresponse.FAILED,{"Error":str(x)[:200]},p.get("Action","GuideDeployer")+"-"+p.get("Bucket","auth"))
+                  print("ERROR",repr(x));respond(event,context,False,{"Error":str(x)[:200]},p.get("Action","Deploy")+"-"+p.get("Bucket","auth"))
       Tags:
         - { Key: Project, Value: aws-basics-workshop-101 }
 
